@@ -1,0 +1,43 @@
+﻿# ── Python virtual environment ────────────────────────────────────────────────
+venv/
+.venv/
+env/
+.env/
+ENV/
+
+# ── Python bytecode & caches ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Secrets / environment ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── SQLite database files (runtime data, not source) ──────────────────────────
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ── Uploaded files & generated reports (runtime data) ────────────────────────
+uploads/
+reports/
+
+# ── Test artefacts ────────────────────────────────────────────────────────────
+.coverage
+htmlcov/
+coverage.xml
+*.log
+
+# ── Distribution / packaging ──────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
+site-packages/

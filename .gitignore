@@ -1,0 +1,28 @@
+﻿# ── OS / Editor ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+node_module/
+database/
+
+# ── Docker local overrides ────────────────────────────────────────────────────
+docker-compose.override.yml
+docker-compose.local.yml
+
+# ── Secrets / env files (never commit real credentials) ──────────────────────
+.env
+.env.local
+.env.*.local
+secrets/
+
+# ── Project-level build artefacts ────────────────────────────────────────────
+dist/
+build/
+

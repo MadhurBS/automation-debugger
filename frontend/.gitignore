@@ -1,0 +1,24 @@
+﻿# ── Node dependencies ─────────────────────────────────────────────────────────
+node_modules/
+
+# ── Build output ──────────────────────────────────────────────────────────────
+dist/
+dist-ssr/
+build/
+
+# ── Vite / TypeScript caches ──────────────────────────────────────────────────
+.vite/
+*.tsbuildinfo
+
+# ── Secrets / environment ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── Test coverage ─────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Editor / OS artefacts ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
