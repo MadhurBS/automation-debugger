@@ -2,10 +2,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   AlertCircle, CheckCircle, ArrowLeft, Loader2, FileDown, FileSpreadsheet,
-  ShieldAlert, Code2, ListChecks, Bug, ChevronRight, Info,
+  ShieldAlert, Code2, ListChecks, Bug, ChevronRight, Info, GitBranch,
+  Package, Workflow, Link2,
 } from 'lucide-react'
 import { getAnalysisResult } from '../api/analysis'
-import { type StandardsViolation, type CodeError } from '../api/analysis'
+import { type StandardsViolation, type CodeError, type LogCorrelation } from '../api/analysis'
 import { downloadPDF, downloadExcel } from '../api/reports'
 import ConfidenceGauge from '../components/ConfidenceGauge'
 import ExceptionTimeline from '../components/ExceptionTimeline'
@@ -32,7 +33,7 @@ const SEV_TEXT: Record<string, string> = {
   critical: 'text-red-600', high: 'text-orange-600', medium: 'text-yellow-600', low: 'text-green-600',
 }
 
-type Tab = 'rca' | 'standards' | 'code-errors'
+type Tab = 'rca' | 'standards' | 'code-errors' | 'correlation'
 
 export default function RCAResults() {
   const { id } = useParams<{ id: string }>()
@@ -62,50 +63,54 @@ export default function RCAResults() {
 
   if (isLoading) return (
     <div className="flex items-center justify-center h-64">
-      <Loader2 size={28} className="animate-spin text-primary-500" />
+      <Loader2 size={28} className="animate-spin text-ibm-blue60" />
     </div>
   )
 
   if (error || !report) return (
     <div className="card p-8 text-center">
       <AlertCircle size={32} className="mx-auto text-red-500 mb-3" />
-      <p className="text-gray-700">Could not load analysis results.</p>
+      <p className="text-carbon-70">Could not load analysis results.</p>
       <button onClick={() => navigate('/history')} className="btn-secondary mt-4">Back to History</button>
     </div>
   )
 
-  const rootCauses    = report.root_causes?.causes ?? []
+  const rootCauses      = report.root_causes?.causes ?? []
   const recommendations = report.recommendations?.items ?? []
-  const violations    = report.standards_violations?.violations ?? []
-  const codeErrors    = report.code_errors?.errors ?? []
-  const primaryCause  = rootCauses[0]
+  const violations      = report.standards_violations?.violations ?? []
+  const codeErrors      = report.code_errors?.errors ?? []
+  const correlations    = report.log_correlation?.correlations ?? []
+  const projectSummary  = report.project_summary ?? {}
+  const primaryCause    = rootCauses[0]
 
   const stdScore = report.standards_score ?? null
   const criticalViolations = violations.filter(v => v.severity === 'critical').length
   const highViolations     = violations.filter(v => v.severity === 'high').length
 
   const tabs: { id: Tab; label: string; icon: typeof Bug; count?: number; countColor?: string }[] = [
-    { id: 'rca',         label: 'Root Cause Analysis', icon: Bug,        count: rootCauses.length },
-    { id: 'standards',   label: 'Coding Standards',    icon: ShieldAlert, count: violations.length, countColor: criticalViolations > 0 ? 'bg-red-500' : highViolations > 0 ? 'bg-orange-500' : 'bg-gray-400' },
-    { id: 'code-errors', label: 'Code Errors',         icon: Code2,       count: codeErrors.length, countColor: codeErrors.length > 0 ? 'bg-orange-500' : 'bg-gray-400' },
+    { id: 'rca',         label: 'Root Cause Analysis', icon: Bug,         count: rootCauses.length },
+    { id: 'standards',   label: 'Coding Standards',    icon: ShieldAlert,  count: violations.length,    countColor: criticalViolations > 0 ? 'bg-red-500' : highViolations > 0 ? 'bg-orange-500' : 'bg-carbon-40' },
+    { id: 'code-errors', label: 'Code Errors',         icon: Code2,        count: codeErrors.length,    countColor: codeErrors.length > 0 ? 'bg-orange-500' : 'bg-carbon-40' },
+    { id: 'correlation', label: 'Log Correlation',     icon: Link2,        count: correlations.length,  countColor: correlations.length > 0 ? 'bg-ibm-blue60' : 'bg-carbon-40' },
   ]
 
   return (
-    <div className="space-y-5 max-w-4xl">
+    <div className="space-y-5 max-w-5xl">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <button onClick={() => navigate('/history')} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-2">
+          <button onClick={() => navigate('/history')} className="flex items-center gap-1.5 text-sm text-carbon-60 hover:text-carbon-100 mb-2">
             <ArrowLeft size={14} /> Back to History
           </button>
-          <h2 className="text-xl font-bold text-gray-900">Analysis Results</h2>
+          <h2 className="text-xl font-semibold text-carbon-100">Analysis Results</h2>
           <div className="flex items-center gap-3 mt-1">
             <PlatformBadge platform={report.platform} size="sm" />
             <span className="badge bg-green-100 text-green-700">
               <CheckCircle size={11} className="mr-1" /> Completed
             </span>
             {report.ai_used && <span className="badge bg-purple-100 text-purple-700">AI-Powered</span>}
+            {correlations.length > 0 && <span className="badge bg-ibm-blue10 text-ibm-blue70">{correlations.length} log events correlated</span>}
           </div>
         </div>
         <div className="flex gap-2 flex-shrink-0">
@@ -120,31 +125,62 @@ export default function RCAResults() {
         </div>
       </div>
 
-      {/* ── Summary scorecards ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="card p-4 text-center">
-          <p className="text-2xl font-bold text-gray-900">{rootCauses.length}</p>
-          <p className="text-xs text-gray-500 mt-0.5">Root Causes</p>
+      {/* ── Project summary bar ─────────────────────────────────────────────── */}
+      {projectSummary.name && (
+        <div className="card p-4 border-l-4 border-l-ibm-blue60">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <div className="flex items-center gap-2">
+              <Workflow size={14} className="text-ibm-blue60" />
+              <span className="text-xs text-carbon-60">Project</span>
+              <span className="text-sm font-semibold text-carbon-100">{projectSummary.name}</span>
+            </div>
+            {(projectSummary.workflow_count ?? 0) > 0 && (
+              <div className="flex items-center gap-1.5">
+                <GitBranch size={13} className="text-carbon-50" />
+                <span className="text-xs text-carbon-60">{projectSummary.workflow_count} workflow{projectSummary.workflow_count !== 1 ? 's' : ''}</span>
+              </div>
+            )}
+            {(projectSummary.package_names?.length ?? 0) > 0 && (
+              <div className="flex items-center gap-1.5">
+                <Package size={13} className="text-carbon-50" />
+                <span className="text-xs text-carbon-60">{projectSummary.package_names?.length} package{(projectSummary.package_names?.length ?? 1) !== 1 ? 's' : ''}</span>
+              </div>
+            )}
+            {projectSummary.metadata?.version && (
+              <span className="text-xs text-carbon-50">v{projectSummary.metadata.version}</span>
+            )}
+            {projectSummary.workflow_names?.slice(0, 3).map((wn: string) => (
+              <span key={wn} className="font-mono text-2xs bg-carbon-10 text-carbon-70 px-2 py-0.5">{wn}</span>
+            ))}
+          </div>
         </div>
-        <div className="card p-4 text-center">
-          <p className={`text-2xl font-bold ${primaryCause ? SEV_TEXT[primaryCause.severity] ?? 'text-gray-900' : 'text-gray-400'}`}>
+      )}
+
+      {/* ── Summary scorecards ─────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-px bg-carbon-20 border border-carbon-20">
+        <div className="bg-white p-4 text-center">
+          <p className="text-2xl font-light text-carbon-100">{rootCauses.length}</p>
+          <p className="text-xs text-carbon-60 mt-0.5">Root Causes</p>
+        </div>
+        <div className="bg-white p-4 text-center">
+          <p className={`text-2xl font-light ${primaryCause ? SEV_TEXT[primaryCause.severity] ?? 'text-carbon-100' : 'text-carbon-40'}`}>
             {primaryCause?.severity?.toUpperCase() || 'N/A'}
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">Top Severity</p>
+          <p className="text-xs text-carbon-60 mt-0.5">Top Severity</p>
         </div>
-        <div className="card p-4 text-center">
-          <p className={`text-2xl font-bold ${violations.length > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+        <div className="bg-white p-4 text-center">
+          <p className={`text-2xl font-light ${violations.length > 0 ? 'text-orange-600' : 'text-green-600'}`}>
             {violations.length}
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">Std. Violations</p>
+          <p className="text-xs text-carbon-60 mt-0.5">Std. Violations</p>
         </div>
-        <div className="card p-4 text-center">
-          <p className={`text-2xl font-bold ${codeErrors.length > 0 ? 'text-red-600' : 'text-green-600'}`}>
+        <div className="bg-white p-4 text-center">
+          <p className={`text-2xl font-light ${codeErrors.length > 0 ? 'text-red-600' : 'text-green-600'}`}>
             {codeErrors.length}
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">Code Errors</p>
+          <p className="text-xs text-carbon-60 mt-0.5">Code Errors</p>
         </div>
-        <div className="card p-4 flex flex-col items-center justify-center">
+        <div className="bg-white p-4 flex flex-col items-center justify-center">
           <ConfidenceGauge value={Math.round((report.overall_confidence ?? 0) * 100)} size={76} />
         </div>
       </div>
@@ -154,27 +190,27 @@ export default function RCAResults() {
         <div className="card p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <ListChecks size={15} className="text-gray-500" />
-              <span className="text-sm font-semibold text-gray-900">Coding Standards Score</span>
+              <ListChecks size={15} className="text-carbon-50" />
+              <span className="text-sm font-semibold text-carbon-90">Coding Standards Score</span>
             </div>
-            <span className={clsx('text-lg font-bold', stdScore >= 80 ? 'text-green-600' : stdScore >= 50 ? 'text-yellow-600' : 'text-red-600')}>
+            <span className={clsx('text-lg font-semibold', stdScore >= 80 ? 'text-green-700' : stdScore >= 50 ? 'text-yellow-700' : 'text-red-700')}>
               {stdScore}/100
             </span>
           </div>
-          <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-2 bg-carbon-10 overflow-hidden">
             <div
-              className={clsx('h-full rounded-full transition-all', stdScore >= 80 ? 'bg-green-500' : stdScore >= 50 ? 'bg-yellow-500' : 'bg-red-500')}
+              className={clsx('h-full transition-all', stdScore >= 80 ? 'bg-green-500' : stdScore >= 50 ? 'bg-yellow-500' : 'bg-red-500')}
               style={{ width: `${stdScore}%` }}
             />
           </div>
           {report.standards_violations?.summary && (
-            <p className="text-xs text-gray-500 mt-2">{report.standards_violations.summary}</p>
+            <p className="text-xs text-carbon-60 mt-2">{report.standards_violations.summary}</p>
           )}
         </div>
       )}
 
-      {/* ── Tabs ───────────────────────────────────────────────────────────── */}
-      <div className="flex border-b border-gray-200 gap-1">
+      {/* ── Tabs — Carbon style ─────────────────────────────────────────────── */}
+      <div className="flex border-b border-carbon-20">
         {tabs.map(tab => (
           <button
             key={tab.id}
@@ -182,14 +218,14 @@ export default function RCAResults() {
             className={clsx(
               'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
               activeTab === tab.id
-                ? 'border-primary-600 text-primary-700'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-ibm-blue60 text-ibm-blue60'
+                : 'border-transparent text-carbon-60 hover:text-carbon-100'
             )}
           >
             <tab.icon size={14} />
             {tab.label}
             {tab.count !== undefined && (
-              <span className={clsx('text-xs font-bold text-white rounded-full px-1.5 py-0.5 min-w-[20px] text-center', tab.countColor ?? 'bg-gray-400')}>
+              <span className={clsx('text-2xs font-bold text-white px-1.5 py-0.5 min-w-[20px] text-center', tab.countColor ?? 'bg-carbon-40')}>
                 {tab.count}
               </span>
             )}
@@ -201,59 +237,76 @@ export default function RCAResults() {
       {activeTab === 'rca' && (
         <div className="space-y-4">
           {rootCauses.length === 0 ? (
-            <div className="card p-8 text-center text-gray-500 text-sm">No root causes identified</div>
+            <div className="card p-8 text-center text-carbon-50 text-sm">No root causes identified</div>
           ) : (
             rootCauses.map((rc, i) => (
-              <div key={i} className={`card border ${SEVERITY_STYLES[rc.severity] || 'border-gray-200'}`}>
+              <div key={i} className={`card border-l-4 ${
+                rc.severity === 'critical' ? 'border-l-red-500' :
+                rc.severity === 'high'     ? 'border-l-orange-500' :
+                rc.severity === 'medium'   ? 'border-l-yellow-500' : 'border-l-green-500'
+              } border border-carbon-20`}>
                 <div className="p-5">
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
                         <span className={`badge border ${SEVERITY_STYLES[rc.severity]}`}>{rc.severity.toUpperCase()}</span>
-                        <span className="badge bg-gray-100 text-gray-600">{rc.category}</span>
+                        <span className="badge bg-carbon-10 text-carbon-70">{rc.category}</span>
+                        {rc.affected_workflow && (
+                          <span className="font-mono text-2xs bg-ibm-blue10 text-ibm-blue70 px-2 py-0.5">{rc.affected_workflow}</span>
+                        )}
                       </div>
-                      <h4 className="text-base font-semibold text-gray-900">#{i + 1} {rc.title}</h4>
+                      <h4 className="text-base font-semibold text-carbon-100">#{i + 1} {rc.title}</h4>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-2xl font-bold text-gray-900">{Math.round(rc.confidence * 100)}%</p>
-                      <p className="text-xs text-gray-500">confidence</p>
+                      <p className="text-2xl font-light text-carbon-100">{Math.round(rc.confidence * 100)}%</p>
+                      <p className="text-xs text-carbon-50">confidence</p>
                     </div>
                   </div>
 
-                  <p className="text-sm text-gray-700 leading-relaxed mb-4">{rc.description}</p>
+                  <p className="text-sm text-carbon-70 leading-relaxed mb-4">{rc.description}</p>
 
                   {(rc.affected_workflow || rc.affected_activity) && (
-                    <div className="flex items-center gap-4 text-xs text-gray-500 mb-4">
-                      {rc.affected_workflow && <span>📂 <strong>Workflow:</strong> {rc.affected_workflow}</span>}
-                      {rc.affected_activity && <span>🔧 <strong>Activity:</strong> {rc.affected_activity}</span>}
+                    <div className="flex items-center gap-4 text-xs text-carbon-60 mb-4 bg-carbon-10 px-3 py-2">
+                      {rc.affected_workflow && (
+                        <span className="flex items-center gap-1.5">
+                          <GitBranch size={11} className="text-ibm-blue60" />
+                          <strong>Workflow:</strong> <span className="font-mono">{rc.affected_workflow}</span>
+                        </span>
+                      )}
+                      {rc.affected_activity && (
+                        <span className="flex items-center gap-1.5">
+                          <Code2 size={11} className="text-carbon-50" />
+                          <strong>Activity:</strong> <span className="font-mono">{rc.affected_activity}</span>
+                        </span>
+                      )}
                     </div>
                   )}
 
                   {rc.evidence.length > 0 && (
                     <div className="mb-4">
-                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Evidence</p>
+                      <p className="text-2xs font-semibold text-carbon-60 uppercase tracking-widest mb-2">Evidence</p>
                       <div className="space-y-1">
-                        {rc.evidence.slice(0, 4).map((ev, j) => (
-                          <p key={j} className="text-xs font-mono bg-gray-900 text-gray-100 px-3 py-1.5 rounded">{ev}</p>
+                        {rc.evidence.slice(0, 5).map((ev, j) => (
+                          <p key={j} className="text-xs font-mono bg-carbon-100 text-green-300 px-3 py-1.5">{ev}</p>
                         ))}
                       </div>
                     </div>
                   )}
 
                   {rc.suggested_fix && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-                      <p className="text-xs font-semibold text-blue-800 mb-1">💡 Suggested Fix</p>
-                      <p className="text-sm text-blue-900">{rc.suggested_fix}</p>
+                    <div className="bg-ibm-blue10 border border-ibm-blue20 p-3 mb-3">
+                      <p className="text-xs font-semibold text-ibm-blue70 mb-1">Suggested Fix</p>
+                      <p className="text-sm text-ibm-blue70">{rc.suggested_fix}</p>
                     </div>
                   )}
 
                   {rc.preventive_recommendations.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Preventive Recommendations</p>
-                      <ul className="space-y-1">
+                      <p className="text-2xs font-semibold text-carbon-60 uppercase tracking-widest mb-2">Preventive Recommendations</p>
+                      <ul className="space-y-1.5">
                         {rc.preventive_recommendations.map((r, j) => (
-                          <li key={j} className="flex items-start gap-2 text-sm text-gray-700">
-                            <CheckCircle size={13} className="text-green-500 mt-0.5 flex-shrink-0" />
+                          <li key={j} className="flex items-start gap-2 text-sm text-carbon-70">
+                            <CheckCircle size={13} className="text-green-600 mt-0.5 flex-shrink-0" />
                             {r}
                           </li>
                         ))}
@@ -268,7 +321,7 @@ export default function RCAResults() {
           {/* Timeline */}
           {rootCauses.length > 0 && (
             <div className="card p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Execution Timeline</h3>
+              <h3 className="text-sm font-semibold text-carbon-90 mb-4">Execution Timeline</h3>
               <ExceptionTimeline events={[
                 { level: 'info', message: 'Process started', timestamp: '' },
                 ...(primaryCause?.evidence?.slice(0, 3).map(ev => ({ level: 'error' as const, message: ev, timestamp: '' })) ?? []),
@@ -280,11 +333,11 @@ export default function RCAResults() {
           {/* Recommendations */}
           {recommendations.length > 0 && (
             <div className="card p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">All Recommendations & Action Items</h3>
+              <h3 className="text-sm font-semibold text-carbon-90 mb-4">All Recommendations & Action Items</h3>
               <ol className="space-y-2">
                 {recommendations.map((rec, i) => (
-                  <li key={i} className="flex items-start gap-3 text-sm text-gray-700">
-                    <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-xs font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                  <li key={i} className="flex items-start gap-3 text-sm text-carbon-70">
+                    <span className="w-5 h-5 bg-ibm-blue10 text-ibm-blue70 text-xs font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
                     {rec}
                   </li>
                 ))}
@@ -299,52 +352,50 @@ export default function RCAResults() {
         <div className="space-y-4">
           {violations.length === 0 ? (
             <div className="card p-10 text-center">
-              <CheckCircle size={36} className="mx-auto text-green-500 mb-3" />
-              <p className="text-base font-semibold text-gray-900">All standards passed!</p>
-              <p className="text-sm text-gray-500 mt-1">No coding standard violations were found in this project.</p>
+              <CheckCircle size={36} className="mx-auto text-green-600 mb-3" />
+              <p className="text-base font-semibold text-carbon-100">All standards passed!</p>
+              <p className="text-sm text-carbon-60 mt-1">No coding standard violations were found in this project.</p>
             </div>
           ) : (
             <>
-              {/* Group by severity */}
               {(['critical', 'high', 'medium', 'low'] as const).map(sev => {
                 const sevViolations = violations.filter((v: StandardsViolation) => v.severity === sev)
                 if (sevViolations.length === 0) return null
                 return (
                   <div key={sev}>
-                    <h3 className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide">
-                      <span className={clsx('w-2.5 h-2.5 rounded-full', SEVERITY_DOT[sev])} />
+                    <h3 className="flex items-center gap-2 text-xs font-bold text-carbon-70 mb-2 uppercase tracking-widest">
+                      <span className={clsx('w-2.5 h-2.5', SEVERITY_DOT[sev])} />
                       {sev} ({sevViolations.length})
                     </h3>
                     <div className="space-y-2">
                       {sevViolations.map((v: StandardsViolation, i: number) => (
-                        <div key={i} className={`card border ${SEVERITY_STYLES[sev]} p-0 overflow-hidden`}>
+                        <div key={i} className={`card border-l-4 ${
+                          sev === 'critical' ? 'border-l-red-500' : sev === 'high' ? 'border-l-orange-500' :
+                          sev === 'medium' ? 'border-l-yellow-500' : 'border-l-green-500'
+                        } border border-carbon-20`}>
                           <div className="p-4">
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
-                                  <span className="font-mono text-xs font-bold text-gray-500">{v.rule_id}</span>
+                                  <span className="font-mono text-xs font-bold text-carbon-60">{v.rule_id}</span>
                                   <span className={`badge border text-xs ${SEVERITY_STYLES[sev]}`}>{sev.toUpperCase()}</span>
                                 </div>
-                                <p className="text-sm font-semibold text-gray-900">{v.rule_name}</p>
-                                <p className="text-xs text-gray-600 mt-1">{v.description}</p>
+                                <p className="text-sm font-semibold text-carbon-100">{v.rule_name}</p>
+                                <p className="text-xs text-carbon-60 mt-1">{v.description}</p>
                               </div>
-                              <ChevronRight size={16} className="text-gray-400 flex-shrink-0 mt-1" />
+                              <ChevronRight size={16} className="text-carbon-40 flex-shrink-0 mt-1" />
                             </div>
-
-                            {/* Location */}
-                            <div className="flex items-center gap-1.5 mt-3 text-xs text-gray-500">
+                            <div className="flex items-center gap-1.5 mt-3 text-xs text-carbon-60">
                               <Code2 size={11} />
                               <span className="font-medium">Location:</span>
-                              <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded">{v.location}</span>
-                              <span className="text-gray-400">({v.location_type})</span>
+                              <span className="font-mono bg-carbon-10 px-1.5 py-0.5">{v.location}</span>
+                              <span className="text-carbon-40">({v.location_type})</span>
                             </div>
-
-                            {/* Recommendation */}
-                            <div className="mt-3 bg-white/60 rounded-lg p-3 border border-current/10">
-                              <p className="text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                            <div className="mt-3 bg-ibm-blue10 p-3">
+                              <p className="text-xs font-semibold text-ibm-blue70 mb-1 flex items-center gap-1">
                                 <Info size={11} /> Recommendation
                               </p>
-                              <p className="text-xs text-gray-700">{v.recommendation}</p>
+                              <p className="text-xs text-ibm-blue70">{v.recommendation}</p>
                             </div>
                           </div>
                         </div>
@@ -353,8 +404,6 @@ export default function RCAResults() {
                   </div>
                 )
               })}
-
-              {/* Passed rules */}
               {(report.standards_violations?.passed_rules?.length ?? 0) > 0 && (
                 <div className="card p-4">
                   <p className="text-xs font-semibold text-green-700 mb-2 flex items-center gap-1.5">
@@ -362,7 +411,7 @@ export default function RCAResults() {
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {report.standards_violations!.passed_rules.map((r, i) => (
-                      <span key={i} className="font-mono text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded">
+                      <span key={i} className="font-mono text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5">
                         {r}
                       </span>
                     ))}
@@ -379,49 +428,107 @@ export default function RCAResults() {
         <div className="space-y-4">
           {codeErrors.length === 0 ? (
             <div className="card p-10 text-center">
-              <CheckCircle size={36} className="mx-auto text-green-500 mb-3" />
-              <p className="text-base font-semibold text-gray-900">No code errors detected</p>
-              <p className="text-sm text-gray-500 mt-1">Static analysis found no errors in the parsed project structure.</p>
+              <CheckCircle size={36} className="mx-auto text-green-600 mb-3" />
+              <p className="text-base font-semibold text-carbon-100">No code errors detected</p>
+              <p className="text-sm text-carbon-60 mt-1">Static analysis found no errors in the parsed project structure.</p>
             </div>
           ) : (
             codeErrors.map((ce: CodeError, i: number) => (
-              <div key={i} className={`card border ${SEVERITY_STYLES[ce.severity] || 'border-gray-200'}`}>
+              <div key={i} className={`card border-l-4 ${
+                ce.severity === 'critical' ? 'border-l-red-500' : ce.severity === 'high' ? 'border-l-orange-500' :
+                ce.severity === 'medium'   ? 'border-l-yellow-500' : 'border-l-green-500'
+              } border border-carbon-20`}>
                 <div className="p-5">
                   <div className="flex items-start gap-3 mb-3">
-                    <div className={clsx('w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0', SEVERITY_STYLES[ce.severity])}>
+                    <div className={clsx('w-8 h-8 flex items-center justify-center flex-shrink-0', SEVERITY_STYLES[ce.severity])}>
                       <Bug size={15} />
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className={`badge border ${SEVERITY_STYLES[ce.severity]}`}>{ce.severity.toUpperCase()}</span>
-                        <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{ce.error_type}</span>
+                        <span className="font-mono text-xs text-carbon-60 bg-carbon-10 px-2 py-0.5">{ce.error_type}</span>
                       </div>
-                      <h4 className="text-sm font-semibold text-gray-900">{ce.title}</h4>
+                      <h4 className="text-sm font-semibold text-carbon-100">{ce.title}</h4>
                     </div>
                   </div>
-
-                  <p className="text-sm text-gray-700 leading-relaxed mb-3">{ce.description}</p>
-
-                  {/* Location + line hint */}
+                  <p className="text-sm text-carbon-70 leading-relaxed mb-3">{ce.description}</p>
                   <div className="grid grid-cols-2 gap-3 mb-3 text-xs">
-                    <div className="bg-gray-50 rounded-lg p-2.5">
-                      <p className="font-semibold text-gray-500 mb-0.5">Location</p>
-                      <p className="font-mono text-gray-800">{ce.location}</p>
+                    <div className="bg-carbon-10 p-2.5">
+                      <p className="font-semibold text-carbon-60 mb-0.5">Location</p>
+                      <p className="font-mono text-carbon-100">{ce.location}</p>
                     </div>
-                    <div className="bg-gray-50 rounded-lg p-2.5">
-                      <p className="font-semibold text-gray-500 mb-0.5">Activity / Stage</p>
-                      <p className="font-mono text-gray-800">{ce.line_hint || '—'}</p>
+                    <div className="bg-carbon-10 p-2.5">
+                      <p className="font-semibold text-carbon-60 mb-0.5">Activity / Stage</p>
+                      <p className="font-mono text-carbon-100">{ce.line_hint || '—'}</p>
                     </div>
                   </div>
-
-                  {/* Fix */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <p className="text-xs font-semibold text-blue-800 mb-1">🔧 How to Fix</p>
-                    <p className="text-sm text-blue-900">{ce.fix}</p>
+                  <div className="bg-ibm-blue10 border border-ibm-blue20 p-3">
+                    <p className="text-xs font-semibold text-ibm-blue70 mb-1">How to Fix</p>
+                    <p className="text-sm text-ibm-blue70">{ce.fix}</p>
                   </div>
                 </div>
               </div>
             ))
+          )}
+        </div>
+      )}
+
+      {/* ════════════════════ TAB: LOG CORRELATION ════════════════════════════ */}
+      {activeTab === 'correlation' && (
+        <div className="space-y-4">
+          {correlations.length === 0 ? (
+            <div className="card p-10 text-center">
+              <Link2 size={36} className="mx-auto text-carbon-40 mb-3" />
+              <p className="text-base font-semibold text-carbon-90">No log file was uploaded</p>
+              <p className="text-sm text-carbon-60 mt-1">
+                Upload an execution log alongside the project to see which workflows and activities
+                produced exceptions, correlated against the project structure.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-carbon-60">
+                {correlations.length} exception event{correlations.length !== 1 ? 's' : ''} from the log file
+                correlated against the uploaded project structure.
+              </p>
+              {correlations.map((c: LogCorrelation, i: number) => (
+                <div key={i} className="card border border-carbon-20 p-4">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                      <span className="badge bg-red-100 text-red-800 mb-1">{c.exception_type}</span>
+                      {c.timestamp && <span className="ml-2 text-xs text-carbon-50 font-mono">{c.timestamp}</span>}
+                    </div>
+                  </div>
+                  <p className="text-sm text-carbon-80 font-mono bg-carbon-10 px-3 py-2 mb-3 break-all">{c.message}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="flex items-start gap-2">
+                      <GitBranch size={13} className="text-ibm-blue60 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="font-semibold text-carbon-60 mb-0.5">Matched Workflow</p>
+                        <p className="font-mono text-carbon-100">
+                          {c.matched_workflow || <span className="text-carbon-40 italic">not matched in project</span>}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Code2 size={13} className="text-carbon-50 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="font-semibold text-carbon-60 mb-0.5">Matched Activity</p>
+                        <p className="font-mono text-carbon-100">
+                          {c.matched_activity || <span className="text-carbon-40 italic">not matched</span>}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  {c.stack_trace_snippet && (
+                    <div className="mt-3">
+                      <p className="text-2xs font-semibold text-carbon-50 uppercase tracking-widest mb-1">Stack trace</p>
+                      <pre className="text-xs font-mono bg-carbon-100 text-green-300 p-3 overflow-x-auto whitespace-pre-wrap">{c.stack_trace_snippet}</pre>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </>
           )}
         </div>
       )}

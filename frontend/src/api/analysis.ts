@@ -43,6 +43,23 @@ export interface AnalysisStatus {
   error_message?: string
 }
 
+export interface LogCorrelation {
+  exception_type: string
+  message: string
+  timestamp: string
+  matched_workflow: string
+  matched_activity: string
+  stack_trace_snippet: string
+}
+
+export interface ProjectSummary {
+  name?: string
+  workflow_count?: number
+  workflow_names?: string[]
+  package_names?: string[]
+  metadata?: Record<string, string>
+}
+
 export interface AnalysisReport extends AnalysisStatus {
   platform: string
   overall_confidence?: number
@@ -52,6 +69,8 @@ export interface AnalysisReport extends AnalysisStatus {
   standards_violations?: { violations: StandardsViolation[]; summary: string; passed_rules: string[] }
   code_errors?: { errors: CodeError[]; total: number }
   standards_score?: number
+  log_correlation?: { correlations: LogCorrelation[] }
+  project_summary?: ProjectSummary
   pdf_path?: string
   excel_path?: string
 }

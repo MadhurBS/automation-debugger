@@ -201,6 +201,8 @@ class AnalysisReportResponse(BaseModel):
     standards_violations: Optional[Dict[str, Any]] = None
     code_errors: Optional[Dict[str, Any]] = None
     standards_score: Optional[float] = None
+    log_correlation: Optional[Dict[str, Any]] = None
+    project_summary: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
     pdf_path: Optional[str] = None
     excel_path: Optional[str] = None

@@ -51,21 +51,11 @@ async def _run_analysis(
             report.status = AnalysisStatusEnum.PARSING
             await db.commit()
 
-            # ── RCA ────────────────────────────────────────────────────────────
-            engine = RCAEngine()
-            rca_result = await engine.analyze(
-                project=project,
-                log_files=log_files,
-                pasted_error_text=pasted_error_text,
-            )
-
-            report.status = AnalysisStatusEnum.ANALYZING
-            await db.commit()
-
-            # ── Coding Standards Check ─────────────────────────────────────────
+            # ── Coding Standards (runs first so RCA can use it) ────────────────
             standards_violations: dict | None = None
             code_errors: dict | None = None
             standards_score: float | None = None
+            std_result = None
 
             if check_standards:
                 checker = StandardsChecker()
@@ -81,6 +71,18 @@ async def _run_analysis(
                 }
                 standards_score = std_result.score
 
+            report.status = AnalysisStatusEnum.ANALYZING
+            await db.commit()
+
+            # ── RCA (receives standards_result for cross-correlation) ──────────
+            engine = RCAEngine()
+            rca_result = await engine.analyze(
+                project=project,
+                log_files=log_files,
+                pasted_error_text=pasted_error_text,
+                standards_result=std_result,
+            )
+
             # ── Persist ────────────────────────────────────────────────────────
             report.status = AnalysisStatusEnum.COMPLETED
             report.platform = project.platform
@@ -92,6 +94,8 @@ async def _run_analysis(
             report.standards_violations = standards_violations
             report.code_errors = code_errors
             report.standards_score = standards_score
+            report.log_correlation = {"correlations": rca_result.log_correlation}
+            report.project_summary = rca_result.project_summary
             await db.commit()
 
         except Exception as exc:

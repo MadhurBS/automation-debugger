@@ -117,6 +117,8 @@ class AnalysisReport(Base):
     standards_violations: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     code_errors: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     standards_score: Mapped[float | None] = mapped_column(nullable=True)
+    log_correlation: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    project_summary: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     raw_ai_response: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     pdf_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
