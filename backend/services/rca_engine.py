@@ -357,34 +357,49 @@ class RCAEngine:
         return exceptions
 
     def _collect_exceptions(self, log_files: list[Any]) -> list[dict]:
+        """
+        Collect ALL exceptions from all log files.
+        - Reads the full all_exceptions list from exception_summary (no cap).
+        - Also reads execution_trace for additional error entries.
+        - Deduplicates by (type, message[:100]).
+        """
         exceptions: list[dict] = []
-        for lf in log_files:
-            summary = lf.exception_summary or {}
-            primary = summary.get("primary_exception")
-            if primary:
-                exceptions.append(primary)
-            for exc in (summary.get("all_exceptions") or [])[:30]:
-                if exc not in exceptions:
-                    exceptions.append(exc)
-            for entry in (lf.execution_trace or {}).get("trace", [])[:50]:
-                if entry.get("is_error") and entry.get("message"):
-                    exceptions.append({
-                        "type": entry.get("exception_type") or "RuntimeError",
-                        "message": entry["message"],
-                        "timestamp": entry.get("timestamp"),
-                        "workflow": entry.get("workflow"),
-                        "activity": entry.get("activity"),
-                        "stack_trace": entry.get("stack_trace"),
-                    })
-        # Deduplicate by (type, message[:100])
         seen: set[tuple] = set()
-        deduped: list[dict] = []
-        for e in exceptions:
-            key = (e.get("type", ""), e.get("message", "")[:100])
+
+        def _add(exc: dict) -> None:
+            key = (exc.get("type", ""), (exc.get("message") or "")[:100])
             if key not in seen:
                 seen.add(key)
-                deduped.append(e)
-        return deduped
+                exceptions.append(exc)
+
+        for lf in log_files:
+            summary = lf.exception_summary or {}
+
+            # Primary exception first (highest priority)
+            primary = summary.get("primary_exception")
+            if primary:
+                _add(primary)
+
+            # ALL exceptions from the summary (was [:30] before — now no cap)
+            for exc in summary.get("all_exceptions") or []:
+                _add(exc)
+
+            # Additional evidence from execution trace
+            # execution_trace is stored as {"trace": [...]} in the DB column
+            trace_data = lf.execution_trace or {}
+            trace_list = trace_data.get("trace", []) if isinstance(trace_data, dict) else []
+            for entry in trace_list:  # no cap — read all
+                if entry.get("is_error") and entry.get("message"):
+                    _add({
+                        "type":       entry.get("exception_type") or "RuntimeError",
+                        "message":    entry["message"][:1000],
+                        "timestamp":  entry.get("timestamp"),
+                        "workflow":   entry.get("workflow"),
+                        "activity":   entry.get("activity"),
+                        "stack_trace": entry.get("stack_trace"),
+                    })
+
+        return exceptions
 
     # ─────────────────────────── Project info ────────────────────────────────
 
@@ -452,7 +467,7 @@ class RCAEngine:
             or primary.get("activity")
             or ""
         )
-        ra.all_exceptions = exceptions[:15]
+        ra.all_exceptions = exceptions  # ALL exceptions, no cap
 
         # Determine failure category from exception type
         rule = HEURISTIC_RULES.get(ra.exception_type)
@@ -473,12 +488,15 @@ class RCAEngine:
         if primary.get("stack_trace"):
             st = (primary["stack_trace"] or "")[:400]
             evidence.append(f"Stack trace snippet:\n{st}")
-        # Additional errors from log
+        # Additional error context from execution trace — read ALL error entries
         for lf in log_files:
-            for entry in (getattr(lf, "execution_trace", None) or {}).get("trace", [])[:5]:
+            trace_data = getattr(lf, "execution_trace", None) or {}
+            trace_list = trace_data.get("trace", []) if isinstance(trace_data, dict) else []
+            for entry in trace_list:
                 if entry.get("is_error") and entry.get("message"):
-                    evidence.append(f"[{entry.get('timestamp','?')}] {entry['message'][:200]}")
-        ra.evidence_from_log = evidence[:12]
+                    ts = entry.get("timestamp") or "?"
+                    evidence.append(f"[{ts}] {entry['message'][:300]}")
+        ra.evidence_from_log = evidence[:20]  # increased from 12 to 20
 
         # Root cause summary
         if rule:
