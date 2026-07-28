@@ -1,17 +1,25 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Bug, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
+
+const FEATURES = [
+  'Auto-detect UiPath, Power Automate, Blue Prism & AA',
+  'AI-powered root cause analysis',
+  'Coding standards checker — 23 rules',
+  'PDF & Excel RCA reports',
+  'Team collaboration & audit history',
+]
 
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
   const { login, register } = useAuthStore()
-  const [tab, setTab] = useState<'login' | 'register'>('login')
-  const [loading, setLoading] = useState(false)
+  const [tab, setTab]               = useState<'login' | 'register'>('login')
+  const [loading, setLoading]       = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [form, setForm] = useState({ email: '', password: '', fullName: '' })
+  const [form, setForm]             = useState({ email: '', password: '', fullName: '' })
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard'
 
@@ -24,7 +32,7 @@ export default function Login() {
         navigate(from, { replace: true })
       } else {
         await register(form.email, form.fullName, form.password)
-        toast.success('Account created! Please log in.')
+        toast.success('Account created — please sign in.')
         setTab('login')
       }
     } catch (err: unknown) {
@@ -36,84 +44,116 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left branding panel */}
-      <div className="hidden lg:flex flex-col justify-between w-1/2 bg-sidebar-bg p-12">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-primary-600 rounded-xl flex items-center justify-center">
-            <Bug size={18} className="text-white" />
-          </div>
-          <span className="text-white font-semibold text-lg">RPA Debugger</span>
-        </div>
+    <div className="min-h-screen flex font-sans">
+
+      {/* ── LEFT — IBM brand panel — Carbon White uses IBM Blue fill ──── */}
+      <div className="hidden lg:flex flex-col justify-between w-[45%] bg-ibm-blue60 px-14 py-12">
+
+        {/* IBM wordmark + product */}
         <div>
-          <h1 className="text-4xl font-bold text-white leading-tight mb-4">
-            AI-Powered<br />Automation<br />Debugger
+          {/* IBM 8-bar SVG logo */}
+          <svg width="60" height="24" viewBox="0 0 80 32" fill="none" className="mb-6">
+            <rect y="0"  width="80" height="5" fill="#0f62fe"/>
+            <rect y="7"  width="60" height="5" fill="#0f62fe"/>
+            <rect y="7"  x="70" width="10" height="5" fill="#0f62fe"/>
+            <rect y="14" width="60" height="5" fill="#0f62fe"/>
+            <rect y="14" x="70" width="10" height="5" fill="#0f62fe"/>
+            <rect y="21" width="60" height="5" fill="#0f62fe"/>
+            <rect y="27" width="80" height="5" fill="#0f62fe"/>
+          </svg>
+
+          <h1 className="text-4xl font-light text-white leading-snug mb-2">
+            RPA Automation<br />
+            <span className="font-semibold">Debugger</span>
           </h1>
-          <p className="text-slate-400 text-base leading-relaxed mb-8">
-            Automatically identify root causes of RPA automation failures across
-            UiPath, Power Automate, Blue Prism, and Automation Anywhere.
+          <p className="text-ibm-blue20 text-sm font-light leading-relaxed mt-4 max-w-xs">
+            AI-powered failure analysis for enterprise RPA platforms — built on IBM design standards.
           </p>
-          <div className="space-y-3">
-            {['Upload project ZIP or log files', 'AI-powered root cause analysis', 'Detailed RCA reports (PDF & Excel)', 'Team collaboration & history'].map(f => (
-              <div key={f} className="flex items-center gap-2.5">
-                <div className="w-5 h-5 rounded-full bg-primary-600/30 flex items-center justify-center flex-shrink-0">
-                  <div className="w-2 h-2 rounded-full bg-primary-400" />
-                </div>
-                <span className="text-slate-300 text-sm">{f}</span>
-              </div>
-            ))}
-          </div>
         </div>
-        <p className="text-slate-600 text-xs">© 2025 Automation Project Debugger</p>
+
+        {/* Feature list */}
+        <div className="space-y-3">
+          <p className="text-2xs font-semibold uppercase tracking-widest text-ibm-blue20 mb-4 opacity-80">
+            What's included
+          </p>
+          {FEATURES.map(f => (
+            <div key={f} className="flex items-start gap-3">
+              {/* White checkmark box on blue */}
+              <span className="mt-0.5 w-4 h-4 bg-white/20 flex items-center justify-center flex-shrink-0">
+                <svg viewBox="0 0 12 12" width="10" height="10" fill="none">
+                  <polyline points="1,6 4.5,10 11,2" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </span>
+              <span className="text-white text-sm font-light leading-tight">{f}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <p className="text-ibm-blue20 text-2xs opacity-70">
+          © {new Date().getFullYear()} IBM Corporation. All rights reserved.
+        </p>
       </div>
 
-      {/* Right form panel */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-surface-1">
+      {/* ── RIGHT — form panel — pure white ───────────────────────────── */}
+      <div className="flex-1 flex items-center justify-center bg-white px-6">
         <div className="w-full max-w-sm">
-          <div className="lg:hidden flex items-center gap-2 mb-8">
-            <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-              <Bug size={15} className="text-white" />
-            </div>
-            <span className="font-semibold text-gray-900">RPA Debugger</span>
+
+          {/* Mobile IBM mark */}
+          <div className="lg:hidden mb-8">
+            <svg width="48" height="20" viewBox="0 0 80 32" fill="none">
+              <rect y="0"  width="80" height="5" fill="#0f62fe"/>
+              <rect y="7"  width="60" height="5" fill="#0f62fe"/>
+              <rect y="7"  x="70" width="10" height="5" fill="#0f62fe"/>
+              <rect y="14" width="60" height="5" fill="#0f62fe"/>
+              <rect y="14" x="70" width="10" height="5" fill="#0f62fe"/>
+              <rect y="21" width="60" height="5" fill="#0f62fe"/>
+              <rect y="27" width="80" height="5" fill="#0f62fe"/>
+            </svg>
+            <p className="mt-2 text-carbon-100 text-sm font-medium">RPA Automation Debugger</p>
           </div>
 
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">
-            {tab === 'login' ? 'Welcome back' : 'Create account'}
+          <h2 className="text-2xl font-semibold text-carbon-100 mb-1">
+            {tab === 'login' ? 'Sign in' : 'Create account'}
           </h2>
-          <p className="text-gray-500 text-sm mb-8">
-            {tab === 'login' ? 'Sign in to your account' : 'Get started for free'}
+          <p className="text-carbon-60 text-sm mb-8">
+            {tab === 'login' ? 'Use your IBM account or registered email' : 'Fill in your details to get started'}
           </p>
 
-          {/* Tabs */}
-          <div className="flex bg-gray-100 rounded-lg p-1 mb-6">
+          {/* Tab switcher — Carbon style */}
+          <div className="flex border-b border-carbon-20 mb-6">
             {(['login', 'register'] as const).map(t => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${
-                  tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                }`}
+                className={[
+                  'px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px',
+                  tab === t
+                    ? 'border-ibm-blue60 text-ibm-blue60'
+                    : 'border-transparent text-carbon-60 hover:text-carbon-100',
+                ].join(' ')}
               >
                 {t === 'login' ? 'Sign In' : 'Register'}
               </button>
             ))}
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             {tab === 'register' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                <label className="block text-xs font-medium text-carbon-70 mb-1">Full Name</label>
                 <input
                   className="input"
-                  placeholder="John Smith"
+                  placeholder="e.g. Jane Smith"
                   value={form.fullName}
                   onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))}
                   required
                 />
               </div>
             )}
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <label className="block text-xs font-medium text-carbon-70 mb-1">Email address</label>
               <input
                 type="email"
                 className="input"
@@ -123,13 +163,14 @@ export default function Login() {
                 required
               />
             </div>
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <label className="block text-xs font-medium text-carbon-70 mb-1">Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   className="input pr-10"
-                  placeholder={tab === 'register' ? 'Min 8 chars, 1 uppercase, 1 digit' : 'Your password'}
+                  placeholder={tab === 'register' ? 'Min 8 chars, 1 uppercase, 1 digit' : 'Enter password'}
                   value={form.password}
                   onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                   required
@@ -137,20 +178,33 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-carbon-40 hover:text-carbon-70"
                 >
                   {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
             </div>
 
-            <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-2.5">
-              {loading ? <Loader2 size={16} className="animate-spin" /> : null}
-              {tab === 'login' ? 'Sign In' : 'Create Account'}
+            {/* Carbon primary button — full width */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary w-full justify-between mt-2"
+            >
+              <span>{tab === 'login' ? 'Sign in' : 'Create account'}</span>
+              {loading
+                ? <Loader2 size={16} className="animate-spin" />
+                : <ArrowRight size={16} />
+              }
             </button>
           </form>
+
+          <p className="mt-8 text-2xs text-carbon-50 leading-relaxed">
+            By signing in you agree to IBM's terms of use and privacy policy.
+          </p>
         </div>
       </div>
+
     </div>
   )
 }
