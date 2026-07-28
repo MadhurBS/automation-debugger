@@ -3,10 +3,10 @@ import { useQuery } from '@tanstack/react-query'
 import {
   AlertCircle, CheckCircle, ArrowLeft, Loader2, FileDown, FileSpreadsheet,
   ShieldAlert, Code2, ListChecks, Bug, ChevronRight, Info, GitBranch,
-  Package, Workflow, Link2,
+  Package, Workflow, Link2, Activity, FlaskConical, ShieldCheck, FileWarning,
 } from 'lucide-react'
 import { getAnalysisResult } from '../api/analysis'
-import { type StandardsViolation, type CodeError, type LogCorrelation } from '../api/analysis'
+import { type StandardsViolation, type CodeError, type LogCorrelation, type RuntimeAnalysis } from '../api/analysis'
 import { downloadPDF, downloadExcel } from '../api/reports'
 import ConfidenceGauge from '../components/ConfidenceGauge'
 import ExceptionTimeline from '../components/ExceptionTimeline'
@@ -33,13 +33,26 @@ const SEV_TEXT: Record<string, string> = {
   critical: 'text-red-600', high: 'text-orange-600', medium: 'text-yellow-600', low: 'text-green-600',
 }
 
-type Tab = 'rca' | 'standards' | 'code-errors' | 'correlation'
+const FAILURE_CAT_COLOR: Record<string, string> = {
+  'Application Issue':   'bg-red-100 text-red-800',
+  'Infrastructure':      'bg-orange-100 text-orange-800',
+  'Business Data':       'bg-yellow-100 text-yellow-800',
+  'Configuration':       'bg-blue-100 text-blue-800',
+  'Credentials':         'bg-purple-100 text-purple-800',
+  'Network':             'bg-indigo-100 text-indigo-800',
+  'Package Dependency':  'bg-pink-100 text-pink-800',
+  'Coding Logic':        'bg-amber-100 text-amber-800',
+  'Permissions':         'bg-rose-100 text-rose-800',
+  'Environment':         'bg-teal-100 text-teal-800',
+}
+
+type Tab = 'runtime' | 'rca' | 'standards' | 'code-errors' | 'correlation'
 
 export default function RCAResults() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [downloading, setDownloading] = useState<'pdf' | 'excel' | null>(null)
-  const [activeTab, setActiveTab] = useState<Tab>('rca')
+  const [activeTab, setActiveTab] = useState<Tab>('runtime')
 
   const { data: report, isLoading, error } = useQuery({
     queryKey: ['analysis-result', id],
@@ -81,13 +94,18 @@ export default function RCAResults() {
   const codeErrors      = report.code_errors?.errors ?? []
   const correlations    = report.log_correlation?.correlations ?? []
   const projectSummary  = report.project_summary ?? {}
+  const runtimeAnalysis = report.runtime_analysis as RuntimeAnalysis | undefined
   const primaryCause    = rootCauses[0]
+  const hasLog          = report.has_log ?? !!runtimeAnalysis?.has_log
 
   const stdScore = report.standards_score ?? null
   const criticalViolations = violations.filter(v => v.severity === 'critical').length
   const highViolations     = violations.filter(v => v.severity === 'high').length
 
   const tabs: { id: Tab; label: string; icon: typeof Bug; count?: number; countColor?: string }[] = [
+    { id: 'runtime',     label: hasLog ? 'Runtime Analysis' : 'Static Analysis', icon: hasLog ? Activity : FlaskConical,
+      countColor: hasLog ? 'bg-red-500' : 'bg-carbon-40',
+      count: hasLog ? (runtimeAnalysis?.all_exceptions?.length ?? 0) : undefined },
     { id: 'rca',         label: 'Root Cause Analysis', icon: Bug,         count: rootCauses.length },
     { id: 'standards',   label: 'Coding Standards',    icon: ShieldAlert,  count: violations.length,    countColor: criticalViolations > 0 ? 'bg-red-500' : highViolations > 0 ? 'bg-orange-500' : 'bg-carbon-40' },
     { id: 'code-errors', label: 'Code Errors',         icon: Code2,        count: codeErrors.length,    countColor: codeErrors.length > 0 ? 'bg-orange-500' : 'bg-carbon-40' },
@@ -232,6 +250,161 @@ export default function RCAResults() {
           </button>
         ))}
       </div>
+
+      {/* ══════════════════ TAB: RUNTIME / STATIC ANALYSIS ═══════════════════ */}
+      {activeTab === 'runtime' && (
+        <div className="space-y-5">
+          {hasLog && runtimeAnalysis ? (
+            <>
+              {/* ── Mode banner ──────────────────────────────────────────── */}
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 border border-red-200 text-sm text-red-800">
+                <Activity size={14} className="flex-shrink-0" />
+                <strong>Runtime Analysis</strong> — based on the uploaded execution log. Log file is the primary source of truth.
+              </div>
+
+              {/* ── Primary failure card ─────────────────────────────────── */}
+              <div className="card border-l-4 border-l-red-500 border border-carbon-20 p-5">
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div>
+                    <p className="text-2xs font-semibold text-carbon-50 uppercase tracking-widest mb-1">Primary Failure</p>
+                    <h3 className="text-base font-semibold text-carbon-100">
+                      {runtimeAnalysis.exception_type || 'Unknown Error'}
+                    </h3>
+                    {runtimeAnalysis.failure_category && (
+                      <span className={clsx('badge mt-1',
+                        FAILURE_CAT_COLOR[runtimeAnalysis.failure_category] ?? 'bg-carbon-10 text-carbon-70'
+                      )}>
+                        {runtimeAnalysis.failure_category}
+                      </span>
+                    )}
+                  </div>
+                  {runtimeAnalysis.timestamp && (
+                    <span className="text-xs font-mono text-carbon-50 flex-shrink-0">{runtimeAnalysis.timestamp}</span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 text-xs">
+                  <div className="bg-carbon-10 p-3">
+                    <p className="font-semibold text-carbon-60 mb-1">Error Message</p>
+                    <p className="font-mono text-carbon-100 break-all">{runtimeAnalysis.error_message || '—'}</p>
+                  </div>
+                  <div className="bg-carbon-10 p-3">
+                    <p className="font-semibold text-carbon-60 mb-1">Exception Type</p>
+                    <p className="font-mono text-carbon-100">{runtimeAnalysis.exception_type || '—'}</p>
+                  </div>
+                  <div className="bg-carbon-10 p-3 flex items-start gap-2">
+                    <GitBranch size={12} className="text-ibm-blue60 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-semibold text-carbon-60 mb-1">Failed Workflow</p>
+                      <p className="font-mono text-carbon-100">{runtimeAnalysis.failed_workflow || 'Not identified'}</p>
+                    </div>
+                  </div>
+                  <div className="bg-carbon-10 p-3 flex items-start gap-2">
+                    <Code2 size={12} className="text-carbon-50 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-semibold text-carbon-60 mb-1">Failed Activity</p>
+                      <p className="font-mono text-carbon-100">{runtimeAnalysis.failed_activity || 'Not identified'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 p-3 mb-4">
+                  <p className="text-xs font-semibold text-amber-800 mb-1">Root Cause</p>
+                  <p className="text-sm text-amber-900">{runtimeAnalysis.root_cause_summary}</p>
+                </div>
+
+                {runtimeAnalysis.evidence_from_log.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-2xs font-semibold text-carbon-60 uppercase tracking-widest mb-2">
+                      Evidence from Log
+                    </p>
+                    <div className="space-y-1">
+                      {runtimeAnalysis.evidence_from_log.map((ev, i) => (
+                        <p key={i} className="text-xs font-mono bg-carbon-100 text-green-300 px-3 py-1.5 break-all whitespace-pre-wrap">{ev}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {runtimeAnalysis.suggested_fixes.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-2xs font-semibold text-carbon-60 uppercase tracking-widest mb-2">Suggested Fixes</p>
+                    <ul className="space-y-1.5">
+                      {runtimeAnalysis.suggested_fixes.map((fix, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-carbon-70">
+                          <ShieldCheck size={13} className="text-ibm-blue60 mt-0.5 flex-shrink-0" />
+                          {fix}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {runtimeAnalysis.validation_steps.length > 0 && (
+                  <div>
+                    <p className="text-2xs font-semibold text-carbon-60 uppercase tracking-widest mb-2">Validation Steps</p>
+                    <ol className="space-y-1.5">
+                      {runtimeAnalysis.validation_steps.map((step, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-carbon-70">
+                          <span className="w-5 h-5 bg-ibm-blue10 text-ibm-blue70 text-xs font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                          {step}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </div>
+
+              {/* ── All exceptions from log ───────────────────────────────── */}
+              {(runtimeAnalysis.all_exceptions?.length ?? 0) > 1 && (
+                <div className="card p-5">
+                  <h3 className="text-sm font-semibold text-carbon-90 mb-3 flex items-center gap-2">
+                    <FileWarning size={14} className="text-red-500" />
+                    All Exceptions from Log ({runtimeAnalysis.all_exceptions.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {runtimeAnalysis.all_exceptions.map((exc, i) => (
+                      <div key={i} className="flex items-start gap-3 bg-carbon-10 px-3 py-2 text-xs">
+                        <span className="badge bg-red-100 text-red-800 flex-shrink-0">{exc.type}</span>
+                        <span className="font-mono text-carbon-80 break-all">{exc.message}</span>
+                        {exc.timestamp && <span className="text-carbon-40 flex-shrink-0">{exc.timestamp}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Static code review disclaimer ────────────────────────── */}
+              <div className="flex items-start gap-2 px-4 py-3 bg-blue-50 border border-blue-200 text-xs text-blue-800">
+                <Info size={13} className="flex-shrink-0 mt-0.5" />
+                Static code review findings (coding standards, structural risks) are available in the
+                <strong className="ml-1">Coding Standards</strong> and <strong className="ml-1">Code Errors</strong> tabs.
+                These are potential risks and are <em>not</em> the runtime root cause.
+              </div>
+            </>
+          ) : (
+            /* ── NO LOG: Static analysis mode ── */
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-50 border border-blue-200 text-sm text-blue-800">
+                <FlaskConical size={14} className="flex-shrink-0" />
+                <strong>Static Analysis Mode</strong> — No log file was uploaded. Findings are potential risks identified from the project structure.
+              </div>
+              <div className="card p-8 text-center space-y-3">
+                <FlaskConical size={36} className="mx-auto text-carbon-40" />
+                <p className="text-base font-semibold text-carbon-90">No Log File Uploaded</p>
+                <p className="text-sm text-carbon-60 max-w-md mx-auto">
+                  Upload an execution log for runtime analysis. The findings in the
+                  <strong> Root Cause Analysis</strong> tab are based on static code review only.
+                </p>
+                <p className="text-xs text-carbon-50">
+                  Go to the project and upload a <span className="font-mono">.log</span> or <span className="font-mono">.txt</span> execution
+                  log file, then re-run the analysis to get runtime-based diagnosis.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ══════════════════════════ TAB: RCA ══════════════════════════════════ */}
       {activeTab === 'rca' && (

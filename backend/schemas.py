@@ -203,6 +203,8 @@ class AnalysisReportResponse(BaseModel):
     standards_score: Optional[float] = None
     log_correlation: Optional[Dict[str, Any]] = None
     project_summary: Optional[Dict[str, Any]] = None
+    runtime_analysis: Optional[Dict[str, Any]] = None
+    has_log: bool = False
     error_message: Optional[str] = None
     pdf_path: Optional[str] = None
     excel_path: Optional[str] = None

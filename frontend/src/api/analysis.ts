@@ -60,10 +60,26 @@ export interface ProjectSummary {
   metadata?: Record<string, string>
 }
 
+export interface RuntimeAnalysis {
+  has_log: boolean
+  exception_type: string
+  error_message: string
+  failed_workflow: string
+  failed_activity: string
+  timestamp: string
+  root_cause_summary: string
+  evidence_from_log: string[]
+  suggested_fixes: string[]
+  validation_steps: string[]
+  failure_category: string
+  all_exceptions: Record<string, string>[]
+}
+
 export interface AnalysisReport extends AnalysisStatus {
   platform: string
   overall_confidence?: number
   ai_used: boolean
+  has_log?: boolean
   root_causes?: { causes: RootCause[] }
   recommendations?: { items: string[] }
   standards_violations?: { violations: StandardsViolation[]; summary: string; passed_rules: string[] }
@@ -71,6 +87,7 @@ export interface AnalysisReport extends AnalysisStatus {
   standards_score?: number
   log_correlation?: { correlations: LogCorrelation[] }
   project_summary?: ProjectSummary
+  runtime_analysis?: RuntimeAnalysis
   pdf_path?: string
   excel_path?: string
 }

@@ -96,6 +96,8 @@ async def _run_analysis(
             report.standards_score = standards_score
             report.log_correlation = {"correlations": rca_result.log_correlation}
             report.project_summary = rca_result.project_summary
+            report.runtime_analysis = rca_result.runtime_analysis
+            report.has_log = rca_result.has_log
             await db.commit()
 
         except Exception as exc:
