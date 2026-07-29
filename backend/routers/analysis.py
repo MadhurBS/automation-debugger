@@ -98,6 +98,8 @@ async def _run_analysis(
             report.project_summary = rca_result.project_summary
             report.runtime_analysis = rca_result.runtime_analysis
             report.has_log = rca_result.has_log
+            report.rpa_tool = rca_result.rpa_tool or None
+            report.ai_narrative = rca_result.ai_narrative or None
             await db.commit()
 
         except Exception as exc:

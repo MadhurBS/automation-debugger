@@ -204,7 +204,9 @@ class AnalysisReportResponse(BaseModel):
     log_correlation: Optional[Dict[str, Any]] = None
     project_summary: Optional[Dict[str, Any]] = None
     runtime_analysis: Optional[Dict[str, Any]] = None
-    has_log: Optional[bool] = False   # NULL in older rows → coerce to False
+    has_log: Optional[bool] = False
+    rpa_tool: Optional[str] = None
+    ai_narrative: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
     pdf_path: Optional[str] = None
     excel_path: Optional[str] = None

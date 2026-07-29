@@ -210,6 +210,8 @@ class RCAResult:
     log_correlation: list[dict] = field(default_factory=list)
     runtime_analysis: dict = field(default_factory=dict)   # serialised RuntimeAnalysis
     has_log: bool = False
+    rpa_tool: str = ""                    # identified by AI
+    ai_narrative: dict = field(default_factory=dict)  # structured AI analysis detail
 
 
 class RCAEngine:
@@ -277,12 +279,21 @@ class RCAEngine:
         raw_response: str | None = None
         ai_used = False
 
+        ai_narrative: dict = {}
+        rpa_tool: str = ""
+
         if settings.OPENAI_API_KEY and settings.OPENAI_API_KEY.startswith("sk-"):
             try:
                 ai_causes, raw_response = await self._ai_analysis(
                     project_info, exception_data, heuristic_causes,
                     has_log=has_log,
                 )
+                # Parse the structured narrative from raw_response
+                try:
+                    ai_narrative = json.loads(raw_response) if raw_response else {}
+                    rpa_tool = ai_narrative.get("rpa_tool", "")
+                except Exception:
+                    ai_narrative = {}
                 ai_used = True
             except Exception as exc:
                 raw_response = f"AI analysis failed: {str(exc)}"
@@ -319,6 +330,8 @@ class RCAEngine:
             log_correlation=log_correlation,
             runtime_analysis=ra_dict,
             has_log=has_log,
+            rpa_tool=rpa_tool,
+            ai_narrative=ai_narrative,
         )
 
     # ─────────────────────────── Log/exception parsing ───────────────────────
@@ -1002,51 +1015,12 @@ class RCAEngine:
         log_confirmed_only: bool = False,
     ) -> list[RootCause]:
         """
-        Convert standards violations to RCA causes.
-        When log_confirmed_only=True, only inject causes where the violation location
-        matches a workflow/activity referenced in the log correlation results.
+        Coding standards violations NEVER appear as root causes.
+        Per expert rules: coding standard analysis belongs under the
+        Coding Standards tab ONLY, not in Root Cause Analysis.
+        This method returns an empty list always.
         """
-        causes: list[RootCause] = []
-        seen: set[str] = set()
-        confirmed_workflows = {
-            (c.get("matched_workflow") or "").lower()
-            for c in log_correlation
-            if c.get("matched_workflow")
-        }
-        confirmed_activities = {
-            (c.get("matched_activity") or "").lower()
-            for c in log_correlation
-            if c.get("matched_activity")
-        }
-
-        for v in getattr(standards_result, "violations", []):
-            if v.severity not in ("critical", "high"):
-                continue
-            key = f"Standards:{v.rule_id}"
-            if key in seen:
-                continue
-
-            if log_confirmed_only:
-                loc = v.location.lower()
-                if loc not in confirmed_workflows and loc not in confirmed_activities:
-                    continue  # Not confirmed by log — skip as runtime cause
-
-            seen.add(key)
-            causes.append(RootCause(
-                category="CodingStandardsViolation",
-                title=f"Standards Violation: {v.rule_name}",
-                description=v.description,
-                severity=v.severity,
-                confidence=0.80,
-                evidence=[f"Rule: {v.rule_id}", f"Location: {v.location} ({v.location_type})"],
-                affected_workflow=v.location if v.location_type == "workflow" else None,
-                suggested_fix=v.recommendation,
-                preventive_recommendations=[
-                    f"Fix rule {v.rule_id} before deploying to production"
-                ],
-            ))
-
-        return causes
+        return []
 
     # ─────────────────────────── AI analysis ─────────────────────────────────
 
@@ -1061,72 +1035,130 @@ class RCAEngine:
         from tenacity import retry, stop_after_attempt, wait_exponential
 
         client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+
         heuristic_summary = "\n".join(
             f"- {c.title}: {c.description}" for c in heuristic_causes
         )
-        exceptions_text = json.dumps(exceptions[:10], indent=2, default=str)
+        exceptions_text = json.dumps(exceptions[:15], indent=2, default=str)
+        platform = project_info.get("platform", "unknown")
         project_text = json.dumps({
             "name":           project_info["name"],
-            "platform":       project_info["platform"],
+            "platform":       platform,
             "workflow_count": project_info["workflow_count"],
-            "workflow_names": project_info["workflow_names"][:10],
-            "package_names":  project_info["package_names"][:10],
+            "workflow_names": project_info["workflow_names"][:15],
+            "package_names":  project_info["package_names"][:15],
+            "activity_names": project_info.get("activity_names", [])[:30],
             "metadata":       project_info["metadata"],
         }, indent=2, default=str)
 
+        # ── Platform-specific activity vocabulary ────────────────────────────
+        platform_context = {
+            "uipath": """
+For UiPath, identify:
+- XAML workflow file (e.g. Main.xaml, Process.xaml, InitAllApplications.xaml)
+- REFramework state: Init / Get Transaction Data / Process Transaction / End Process
+- Container type: Sequence / Flowchart / State Machine
+- Likely activity: Read Range, Click, Type Into, Invoke Workflow File,
+  Use Application/Browser, Assign, For Each, HTTP Request, Deserialize JSON,
+  Get Credential, Log Message, Send SMTP Mail, Data Table operations""",
+            "blue_prism": """
+For Blue Prism, identify:
+- Process name and Page name (e.g. Main Page, Initialise, Clean Up)
+- Stage type: Navigate / Read / Write / Wait / Decision / Calculation / Code / Exception / Recovery
+- Utility VBO being called (e.g. MS Excel VBO, Credentials VBO, File Management VBO)
+- Business Object and Action invoked""",
+            "automation_anywhere": """
+For Automation Anywhere, identify:
+- TaskBot or MetaBot name
+- Package and action: Excel (Open/Read/Write), Browser (Open/Navigate),
+  Object Cloning, Database, File/Folder, String, Loop, Error Handler
+- MetaBot DLL action if applicable""",
+            "power_automate": """
+For Power Automate Desktop, identify:
+- Flow and Subflow name
+- Action type: Launch Excel / Read from Excel / Click / Send Keys /
+  Launch Web Browser / Web Automation / Set Variable / Loop / Condition / Exception Block
+For Power Automate Cloud, identify:
+- Trigger / Scope / Action / Apply to Each / Condition / HTTP
+- Connector: SharePoint / Outlook / Dataverse / Teams / OneDrive""",
+        }.get(platform, "Identify the likely workflow, stage, and activity based on the exception.")
+
         if has_log:
-            analysis_instruction = """
-You are an expert RPA Automation Debugger performing LOG-FIRST analysis.
+            system_instruction = f"""You are an expert RPA Automation Debugger with deep knowledge of UiPath, Blue Prism, Automation Anywhere, and Power Automate.
 
-RULES:
-1. The log exceptions below are the PRIMARY source of truth.
-2. Base all runtime root causes ONLY on evidence present in the log exceptions.
-3. Never assume errors not present in the log.
-4. Reference actual workflow names, activity names, and exception messages from the data.
-5. Do NOT list coding standards violations as runtime root causes.
-6. Identify the failure category: Application Issue / Infrastructure / Business Data /
-   Configuration / Credentials / Network / Package Dependency / Coding Logic / Environment / Permissions.
-"""
+Your task is LOG-FIRST debugging: correlate the execution log with the uploaded automation project.
+
+STRICT RULES:
+1. The log exceptions are the PRIMARY and ONLY source of truth for runtime root causes.
+2. Base every root cause STRICTLY on evidence present in the log — never assume errors not in the log.
+3. Do NOT include coding standards violations in root causes — those belong in a separate tab.
+4. Do NOT generate generic root causes — every finding must reference actual log evidence.
+5. Map each exception to the most likely workflow, stage/state/page, and activity/action.
+6. Classify the failure: Application Issue / Infrastructure / Business Data / Configuration /
+   Credentials / Network / Package Dependency / Coding Logic / Permissions / Environment.
+
+{platform_context}
+
+For each root cause, produce the structured analysis following this expert format:
+- What operation was being performed
+- Which workflow/process and which stage/state/activity most likely failed
+- Why it failed (infer from log evidence + project structure)
+- What the bot was doing immediately before the failure
+- Confidence level with reasoning (High/Medium/Low)"""
+
         else:
-            analysis_instruction = """
-You are an expert RPA Automation Debugger performing STATIC analysis (no log provided).
+            system_instruction = f"""You are an expert RPA Automation Debugger with deep knowledge of UiPath, Blue Prism, Automation Anywhere, and Power Automate.
 
-RULES:
-1. Perform static code review of the project structure.
-2. Identify coding standards issues, missing exception handlers, hardcoded values,
-   potential runtime risks, performance concerns, and security issues.
-3. Label all findings as 'potential risk' — NOT confirmed runtime failures.
+Your task is STATIC analysis of the project structure — no execution log is available.
+
+STRICT RULES:
+1. Identify potential runtime risks, missing error handlers, and structural issues.
+2. All findings are POTENTIAL risks — NOT confirmed runtime failures.
+3. Do NOT include coding standards violations in root causes — those belong in a separate tab.
 4. Reference actual workflow names, activity names, and package names from the project data.
-"""
+5. For each risk, identify the most likely workflow and activity where it could fail.
+6. Do NOT generate generic findings — every finding must reference specific project artefacts.
 
-        prompt = f"""{analysis_instruction}
+{platform_context}"""
 
-PROJECT:
+        prompt = f"""{system_instruction}
+
+PROJECT STRUCTURE:
 {project_text}
 
-EXCEPTIONS FROM LOG:
-{exceptions_text if has_log else "No log provided."}
+{"EXCEPTIONS FROM LOG:" if has_log else "NO LOG PROVIDED — static analysis only."}
+{exceptions_text if has_log else ""}
 
-INITIAL HEURISTIC FINDINGS:
-{heuristic_summary if heuristic_summary else "None detected"}
+{"HEURISTIC PRE-ANALYSIS:" if heuristic_summary else ""}
+{heuristic_summary if heuristic_summary else ""}
 
-Respond with JSON (exact structure):
+Respond with JSON (exact structure — do not add extra keys):
 {{
+  "rpa_tool": "UiPath | Blue Prism | Automation Anywhere | Power Automate Desktop | Power Automate Cloud | Unknown",
+  "runtime_error_summary": "one-sentence summary of the primary runtime failure (or 'No log — static analysis' if no log)",
   "root_causes": [
     {{
-      "category": "NullReference|SelectorFailure|Timeout|MissingPackage|FileNotFound|MissingArgument|CredentialIssue|NetworkOrAPIFailure|QueueFailure|ConfigurationIssue|BusinessRuleException|UnhandledException|MissingExceptionHandler|ArchitectureIssue|CodingStandardsViolation|ProjectInfo",
-      "title": "concise title referencing actual workflow/activity name if known",
-      "description": "detailed explanation referencing specific project artefacts",
+      "category": "NullReference|SelectorFailure|Timeout|MissingPackage|FileNotFound|MissingArgument|CredentialIssue|NetworkOrAPIFailure|QueueFailure|ConfigurationIssue|BusinessRuleException|UnhandledException|MissingExceptionHandler|ArchitectureIssue|PermissionIssue|EnvironmentIssue|ProjectInfo",
+      "title": "concise title — must reference actual workflow/activity name",
+      "description": "detailed explanation referencing specific project artefacts from the data above",
       "severity": "critical|high|medium|low",
       "confidence": 0.0,
-      "evidence": ["specific evidence from log or project structure"],
-      "affected_workflow": "exact workflow filename or null",
-      "affected_activity": "exact activity name or null",
-      "suggested_fix": "specific actionable fix for THIS project",
-      "preventive_recommendations": ["list of preventive measures"]
+      "confidence_label": "High|Medium|Low",
+      "confidence_reasoning": "why you assigned this confidence level",
+      "failure_category": "Application Issue|Infrastructure|Business Data|Configuration|Credentials|Network|Package Dependency|Coding Logic|Permissions|Environment",
+      "evidence": ["specific evidence line from log or project structure — must be concrete"],
+      "affected_workflow": "exact workflow/process/page filename or null",
+      "affected_activity": "exact activity/stage/action name or null",
+      "what_was_happening": "what operation the bot was performing when this failed",
+      "why_it_failed": "inferred reason based on log evidence and project context",
+      "suggested_checks": ["step-by-step validation checks"],
+      "suggested_fix": "specific actionable fix referencing this project's actual workflow/activity names",
+      "preventive_recommendations": ["preventive measures specific to this platform and project"]
     }}
   ]
-}}"""
+}}
+
+IMPORTANT: Do NOT include any CodingStandardsViolation category items — those go in a separate tab."""
 
         @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
         async def _call():
@@ -1141,13 +1173,69 @@ Respond with JSON (exact structure):
         response = await _call()
         raw_text = response.choices[0].message.content or "{}"
         data = json.loads(raw_text)
+
         causes: list[RootCause] = []
         for rc_data in data.get("root_causes", []):
+            # Skip any coding standards violations that AI may have included
+            if rc_data.get("category") == "CodingStandardsViolation":
+                continue
+            # Extract RootCause-compatible fields only (ignore extra AI fields)
+            rc_fields = {
+                "category":                  rc_data.get("category", "UnhandledException"),
+                "title":                     rc_data.get("title", ""),
+                "description":               rc_data.get("description", ""),
+                "severity":                  rc_data.get("severity", "medium"),
+                "confidence":                float(rc_data.get("confidence", 0.7)),
+                "evidence":                  rc_data.get("evidence", []),
+                "affected_workflow":         rc_data.get("affected_workflow"),
+                "affected_activity":         rc_data.get("affected_activity"),
+                "suggested_fix":             rc_data.get("suggested_fix", ""),
+                "preventive_recommendations": rc_data.get("preventive_recommendations", []),
+            }
+            # Enrich description with AI's deeper analysis fields
+            what_was = rc_data.get("what_was_happening", "")
+            why      = rc_data.get("why_it_failed", "")
+            conf_rsn = rc_data.get("confidence_reasoning", "")
+            fail_cat = rc_data.get("failure_category", "")
+            if what_was:
+                rc_fields["description"] += f"\n\nOperation: {what_was}"
+            if why:
+                rc_fields["description"] += f"\nWhy it failed: {why}"
+            if fail_cat:
+                rc_fields["evidence"] = [f"Failure category: {fail_cat}"] + rc_fields["evidence"]
+            if conf_rsn:
+                rc_fields["evidence"].append(f"Confidence reasoning: {conf_rsn}")
+            # Add suggested_checks to preventive_recommendations
+            for chk in rc_data.get("suggested_checks", []):
+                if chk not in rc_fields["preventive_recommendations"]:
+                    rc_fields["preventive_recommendations"].append(chk)
             try:
-                causes.append(RootCause(**rc_data))
+                causes.append(RootCause(**rc_fields))
             except Exception:
                 pass
-        return causes, raw_text
+
+        # Build a rich structured narrative stored in raw_ai_response
+        structured = {
+            "rpa_tool":             data.get("rpa_tool", "Unknown"),
+            "runtime_error_summary": data.get("runtime_error_summary", ""),
+            "root_causes_detail":   [
+                {
+                    "title":               rc.get("title"),
+                    "affected_workflow":   rc.get("affected_workflow"),
+                    "affected_activity":   rc.get("affected_activity"),
+                    "what_was_happening":  rc.get("what_was_happening"),
+                    "why_it_failed":       rc.get("why_it_failed"),
+                    "failure_category":    rc.get("failure_category"),
+                    "confidence_label":    rc.get("confidence_label"),
+                    "confidence_reasoning": rc.get("confidence_reasoning"),
+                    "suggested_checks":    rc.get("suggested_checks", []),
+                    "suggested_fix":       rc.get("suggested_fix"),
+                }
+                for rc in data.get("root_causes", [])
+                if rc.get("category") != "CodingStandardsViolation"
+            ],
+        }
+        return causes, json.dumps(structured, indent=2)
 
     # ─────────────────────────── Merging & recommendations ───────────────────
 

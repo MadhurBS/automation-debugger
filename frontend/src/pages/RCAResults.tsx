@@ -6,7 +6,7 @@ import {
   Package, Workflow, Link2, Activity, FlaskConical, ShieldCheck, FileWarning,
 } from 'lucide-react'
 import { getAnalysisResult } from '../api/analysis'
-import { type StandardsViolation, type CodeError, type LogCorrelation, type RuntimeAnalysis } from '../api/analysis'
+import { type StandardsViolation, type CodeError, type LogCorrelation, type RuntimeAnalysis, type AINarrative, type AINarrativeCause } from '../api/analysis'
 import { downloadPDF, downloadExcel } from '../api/reports'
 import ConfidenceGauge from '../components/ConfidenceGauge'
 import ExceptionTimeline from '../components/ExceptionTimeline'
@@ -95,6 +95,8 @@ export default function RCAResults() {
   const correlations    = report.log_correlation?.correlations ?? []
   const projectSummary  = report.project_summary ?? {}
   const runtimeAnalysis = report.runtime_analysis as RuntimeAnalysis | undefined
+  const aiNarrative     = report.ai_narrative as AINarrative | undefined
+  const rpaToolLabel    = report.rpa_tool || aiNarrative?.rpa_tool || ''
   const primaryCause    = rootCauses[0]
   const hasLog          = report.has_log ?? !!runtimeAnalysis?.has_log
 
@@ -257,10 +259,23 @@ export default function RCAResults() {
           {hasLog && runtimeAnalysis ? (
             <>
               {/* ── Mode banner ──────────────────────────────────────────── */}
-              <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 border border-red-200 text-sm text-red-800">
-                <Activity size={14} className="flex-shrink-0" />
-                <strong>Runtime Analysis</strong> — based on the uploaded execution log. Log file is the primary source of truth.
+              <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-red-50 border border-red-200 text-sm text-red-800">
+                <div className="flex items-center gap-2">
+                  <Activity size={14} className="flex-shrink-0" />
+                  <strong>Runtime Analysis</strong> — log file is the primary source of truth.
+                </div>
+                {rpaToolLabel && (
+                  <span className="badge bg-ibm-blue10 text-ibm-blue70 text-xs font-semibold">{rpaToolLabel}</span>
+                )}
               </div>
+
+              {/* ── AI Runtime Error Summary ─────────────────────────────── */}
+              {aiNarrative?.runtime_error_summary && (
+                <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 border border-amber-200">
+                  <AlertCircle size={15} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm font-medium text-amber-900">{aiNarrative.runtime_error_summary}</p>
+                </div>
+              )}
 
               {/* ── Primary failure card ─────────────────────────────────── */}
               <div className="card border-l-4 border-l-red-500 border border-carbon-20 p-5">
@@ -374,12 +389,103 @@ export default function RCAResults() {
                 </div>
               )}
 
+              {/* ── AI Narrative: 11-point per-cause detail ──────────────── */}
+              {(aiNarrative?.root_causes_detail?.length ?? 0) > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-carbon-90 flex items-center gap-2">
+                    <Bug size={14} className="text-ibm-blue60" />
+                    Detailed Analysis ({aiNarrative!.root_causes_detail!.length} failure{aiNarrative!.root_causes_detail!.length !== 1 ? 's' : ''} identified)
+                  </h3>
+                  {aiNarrative!.root_causes_detail!.map((detail: AINarrativeCause, i: number) => (
+                    <div key={i} className="card border border-carbon-20 p-5 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <h4 className="text-sm font-semibold text-carbon-100">{detail.title}</h4>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {detail.failure_category && (
+                            <span className={clsx('badge text-xs',
+                              FAILURE_CAT_COLOR[detail.failure_category] ?? 'bg-carbon-10 text-carbon-70'
+                            )}>{detail.failure_category}</span>
+                          )}
+                          {detail.confidence_label && (
+                            <span className={clsx('badge text-xs font-semibold',
+                              detail.confidence_label === 'High'   ? 'bg-green-100 text-green-800' :
+                              detail.confidence_label === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-carbon-10 text-carbon-60'
+                            )}>
+                              {detail.confidence_label} Confidence
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        {detail.affected_workflow && (
+                          <div className="bg-carbon-10 p-2.5">
+                            <p className="font-semibold text-carbon-60 mb-0.5 flex items-center gap-1">
+                              <GitBranch size={10} /> Workflow / Process
+                            </p>
+                            <p className="font-mono text-carbon-100">{detail.affected_workflow}</p>
+                          </div>
+                        )}
+                        {detail.affected_activity && (
+                          <div className="bg-carbon-10 p-2.5">
+                            <p className="font-semibold text-carbon-60 mb-0.5 flex items-center gap-1">
+                              <Code2 size={10} /> Stage / Activity / Action
+                            </p>
+                            <p className="font-mono text-carbon-100">{detail.affected_activity}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {detail.what_was_happening && (
+                        <div>
+                          <p className="text-2xs font-semibold text-carbon-50 uppercase tracking-widest mb-1">What was happening</p>
+                          <p className="text-sm text-carbon-70">{detail.what_was_happening}</p>
+                        </div>
+                      )}
+                      {detail.why_it_failed && (
+                        <div>
+                          <p className="text-2xs font-semibold text-carbon-50 uppercase tracking-widest mb-1">Why it failed</p>
+                          <p className="text-sm text-carbon-70">{detail.why_it_failed}</p>
+                        </div>
+                      )}
+                      {detail.confidence_reasoning && (
+                        <div className="flex items-start gap-2 text-xs text-carbon-60 bg-carbon-10 px-3 py-2">
+                          <Info size={11} className="flex-shrink-0 mt-0.5" />
+                          <span><strong>Confidence reasoning:</strong> {detail.confidence_reasoning}</span>
+                        </div>
+                      )}
+                      {(detail.suggested_checks?.length ?? 0) > 0 && (
+                        <div>
+                          <p className="text-2xs font-semibold text-carbon-50 uppercase tracking-widest mb-2">Suggested Checks</p>
+                          <ol className="space-y-1">
+                            {detail.suggested_checks.map((chk: string, j: number) => (
+                              <li key={j} className="flex items-start gap-2 text-xs text-carbon-70">
+                                <span className="w-4 h-4 bg-ibm-blue10 text-ibm-blue70 text-2xs font-bold flex items-center justify-center flex-shrink-0">{j + 1}</span>
+                                {chk}
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+                      {detail.suggested_fix && (
+                        <div className="bg-ibm-blue10 border border-ibm-blue20 p-3">
+                          <p className="text-xs font-semibold text-ibm-blue70 mb-1 flex items-center gap-1">
+                            <ShieldCheck size={11} /> Recommended Fix
+                          </p>
+                          <p className="text-sm text-ibm-blue70">{detail.suggested_fix}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* ── Static code review disclaimer ────────────────────────── */}
               <div className="flex items-start gap-2 px-4 py-3 bg-blue-50 border border-blue-200 text-xs text-blue-800">
                 <Info size={13} className="flex-shrink-0 mt-0.5" />
-                Static code review findings (coding standards, structural risks) are available in the
-                <strong className="ml-1">Coding Standards</strong> and <strong className="ml-1">Code Errors</strong> tabs.
-                These are potential risks and are <em>not</em> the runtime root cause.
+                Coding standard findings are available in the
+                <strong className="ml-1">Coding Standards</strong> and <strong className="ml-1">Code Errors</strong> tabs — they are separate from runtime root causes.
               </div>
             </>
           ) : (

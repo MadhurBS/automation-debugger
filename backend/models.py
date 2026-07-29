@@ -121,6 +121,8 @@ class AnalysisReport(Base):
     project_summary: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     runtime_analysis: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     has_log: Mapped[bool] = mapped_column(Boolean, default=False)
+    rpa_tool: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    ai_narrative: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     raw_ai_response: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     pdf_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
