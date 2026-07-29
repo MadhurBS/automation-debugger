@@ -245,7 +245,7 @@ class RCAEngine:
             exception_data = pasted + exception_data
 
         # has_log = True whenever a log file was actually uploaded OR pasted,
-        # even if the log contains zero exceptions (success scenario).
+        # even if the log has zero exceptions (success run).
         has_log = bool(log_files) or bool(pasted_error_text and pasted_error_text.strip())
 
         # ── Log correlation (always runs when exceptions exist) ──────────────
@@ -462,11 +462,10 @@ class RCAEngine:
         project_info: dict,
         log_files: list[Any],
     ) -> RuntimeAnalysis:
-        # has_log reflects whether a log file was actually provided, not just whether
-        # exceptions were found — a success log has no exceptions but was still uploaded.
+        # has_log reflects whether a log was provided, independent of exception count.
         ra = RuntimeAnalysis(has_log=bool(log_files))
         if not exceptions:
-            # Success scenario — log present but no errors; fill a clean summary
+            # Success scenario — log uploaded but no errors detected
             if log_files:
                 total_entries = sum(
                     len((getattr(lf, "parsed_entries", None) or {}).get("entries", []))
