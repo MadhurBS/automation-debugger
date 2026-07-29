@@ -195,7 +195,7 @@ class AnalysisReportResponse(BaseModel):
     status: str
     platform: str
     overall_confidence: Optional[float] = None
-    ai_used: bool
+    ai_used: bool = False
     root_causes: Optional[Dict[str, Any]] = None
     recommendations: Optional[Dict[str, Any]] = None
     standards_violations: Optional[Dict[str, Any]] = None
@@ -204,14 +204,22 @@ class AnalysisReportResponse(BaseModel):
     log_correlation: Optional[Dict[str, Any]] = None
     project_summary: Optional[Dict[str, Any]] = None
     runtime_analysis: Optional[Dict[str, Any]] = None
-    has_log: bool = False
+    has_log: Optional[bool] = False   # NULL in older rows → coerce to False
     error_message: Optional[str] = None
     pdf_path: Optional[str] = None
     excel_path: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "coerce_numbers_to_str": False}
+
+    @field_validator("has_log", "ai_used", mode="before")
+    @classmethod
+    def coerce_none_bool(cls, v: Any) -> bool:
+        """SQLite stores booleans as 0/1 integers; NULL → False."""
+        if v is None:
+            return False
+        return bool(v)
 
 
 class AnalysisListResponse(BaseModel):
