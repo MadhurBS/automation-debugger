@@ -1,0 +1,14 @@
+2024-08-06 11:30:00.000 | INFO  | Flow: LeaveApproval_AutoNotify_Error | Run ID: 08585f3a-run-047 | Trigger fired
+2024-08-06 11:30:01.000 | INFO  | Trigger: When_an_item_is_created_or_modified | SharePoint item ID: 1089 | Employee: Marcus Webb
+2024-08-06 11:30:02.000 | INFO  | Action: Scope_Process_Leave_Request | Scope started
+2024-08-06 11:30:03.000 | INFO  | Action: Get_Manager_Details | Manager: Sarah Park (s.park@company.com)
+2024-08-06 11:30:04.000 | INFO  | Action: HTTP_Call_HR_System | POST https://hrsystem.company.com/api/leave/approve
+2024-08-06 11:30:05.000 | ERROR | Action: HTTP_Call_HR_System | HTTP request failed
+2024-08-06 11:30:05.000 | ERROR | StatusCode: 401 Unauthorized
+2024-08-06 11:30:05.000 | ERROR | Response: error=invalid_token error_description=The access token has expired. Issued: 2024-07-07T00:00:00Z. Expired after 30 days.
+2024-08-06 11:30:05.000 | ERROR | Request headers: Authorization=Bearer [REDACTED] Content-Type=application/json
+2024-08-06 11:30:06.000 | ERROR | Action: Scope_Process_Leave_Request | Scope failed - dependent actions skipped
+2024-08-06 11:30:06.000 | WARN  | Action: Send_Approval_Email | Skipped - runAfter condition: HTTP_Call_HR_System=Failed
+2024-08-06 11:30:06.000 | WARN  | Action: Update_SharePoint_Status | Skipped - runAfter condition: Send_Approval_Email=Skipped
+2024-08-06 11:30:07.000 | ERROR | Flow: LeaveApproval_AutoNotify_Error | Run ID: 08585f3a-run-047 | Status: Failed | Duration: 7s
+2024-08-06 11:30:07.000 | ERROR | FailedAction: HTTP_Call_HR_System | Code: InvalidAuthenticationToken | Message: 401 Unauthorized - token expired

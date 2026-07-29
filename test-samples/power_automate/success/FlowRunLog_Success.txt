@@ -1,0 +1,11 @@
+2024-08-05 10:00:00.000 | INFO  | Flow: LeaveApproval_AutoNotify | Run ID: 08585f3a-run-001 | Trigger fired
+2024-08-05 10:00:01.000 | INFO  | Trigger: When_an_item_is_created_or_modified | SharePoint item ID: 1042 | Employee: Emily Chen
+2024-08-05 10:00:02.000 | INFO  | Action: Scope_Process_Leave_Request | Scope started
+2024-08-05 10:00:03.000 | INFO  | Action: Get_Manager_Details | Manager retrieved: David Lee (d.lee@company.com)
+2024-08-05 10:00:04.000 | INFO  | Action: Condition_Check_Leave_Type | LeaveType: Annual | Condition: TRUE
+2024-08-05 10:00:05.000 | INFO  | Action: HTTP_Call_HR_System | POST https://hrsystem.company.com/api/leave/approve | Status: 200 OK
+2024-08-05 10:00:06.000 | INFO  | Action: HTTP_Call_HR_System | Response: approvalId=APR-2024-0812 status=Approved
+2024-08-05 10:00:07.000 | INFO  | Action: Send_Approval_Email | Email sent to emily.chen@company.com and d.lee@company.com
+2024-08-05 10:00:08.000 | INFO  | Action: Update_SharePoint_Status | Item 1042 updated - Status: Approved
+2024-08-05 10:00:09.000 | INFO  | Action: Scope_Process_Leave_Request | Scope completed successfully
+2024-08-05 10:00:10.000 | INFO  | Flow: LeaveApproval_AutoNotify | Run ID: 08585f3a-run-001 | Status: Succeeded | Duration: 10s

@@ -1,0 +1,158 @@
+[
+  {
+    "timeStamp": "2024-06-15T09:00:00.000+0000",
+    "level": "INFO",
+    "message": "Process started",
+    "workflowFilePath": "Main.xaml"
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:02.000+0000",
+    "level": "INFO",
+    "message": "Init state started",
+    "workflowFilePath": "Main.xaml",
+    "activityInfo": {
+      "Name": "InitAllSettings"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:04.000+0000",
+    "level": "INFO",
+    "message": "Credentials loaded: SAPCredential",
+    "workflowFilePath": "Main.xaml",
+    "activityInfo": {
+      "Name": "GetAppCredential"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:07.000+0000",
+    "level": "INFO",
+    "message": "Config loaded: MaxRetries=3, Timeout=30000ms",
+    "workflowFilePath": "Main.xaml",
+    "activityInfo": {
+      "Name": "InitAllSettings"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:09.000+0000",
+    "level": "INFO",
+    "message": "Transaction data state started",
+    "workflowFilePath": "Main.xaml",
+    "activityInfo": {
+      "Name": "GetTransactionData"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:11.000+0000",
+    "level": "INFO",
+    "message": "Queue item retrieved: InvoiceQueue - TXN-20240615-001",
+    "workflowFilePath": "Main.xaml",
+    "activityInfo": {
+      "Name": "GetTransactionData"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:13.000+0000",
+    "level": "INFO",
+    "message": "SAP browser launched",
+    "workflowFilePath": "Process.xaml",
+    "activityInfo": {
+      "Name": "Open SAP"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:16.000+0000",
+    "level": "INFO",
+    "message": "Typed invoice number: INV-2024-0087",
+    "workflowFilePath": "Process.xaml",
+    "activityInfo": {
+      "Name": "Enter Invoice Number"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:18.000+0000",
+    "level": "INFO",
+    "message": "Submit button clicked",
+    "workflowFilePath": "Process.xaml",
+    "activityInfo": {
+      "Name": "Click Submit"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:20.000+0000",
+    "level": "INFO",
+    "message": "Confirmation: Invoice INV-2024-0087 posted",
+    "workflowFilePath": "Process.xaml",
+    "activityInfo": {
+      "Name": "Get Confirmation"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:22.000+0000",
+    "level": "INFO",
+    "message": "15 rows read from Invoices sheet",
+    "workflowFilePath": "Process.xaml",
+    "activityInfo": {
+      "Name": "Read Invoice Data"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:25.000+0000",
+    "level": "INFO",
+    "message": "Row: INV-2024-0088, Amount: 1250.00",
+    "workflowFilePath": "Process.xaml",
+    "activityInfo": {
+      "Name": "For Each Invoice Row"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:27.000+0000",
+    "level": "INFO",
+    "message": "Row: INV-2024-0089, Amount: 3400.75",
+    "workflowFilePath": "Process.xaml",
+    "activityInfo": {
+      "Name": "For Each Invoice Row"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:29.000+0000",
+    "level": "INFO",
+    "message": "Process workflow completed",
+    "workflowFilePath": "Process.xaml",
+    "activityInfo": {
+      "Name": "Log Complete"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:31.000+0000",
+    "level": "INFO",
+    "message": "TXN-20240615-001 set to Success",
+    "workflowFilePath": "Main.xaml",
+    "activityInfo": {
+      "Name": "SetTransactionStatus"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:33.000+0000",
+    "level": "INFO",
+    "message": "No more queue items - transitioning to End Process",
+    "workflowFilePath": "Main.xaml",
+    "activityInfo": {
+      "Name": "GetTransactionData"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:35.000+0000",
+    "level": "INFO",
+    "message": "SAP browser closed",
+    "workflowFilePath": "Main.xaml",
+    "activityInfo": {
+      "Name": "CloseApplication"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T09:00:37.000+0000",
+    "level": "INFO",
+    "message": "Process completed. Total: 1 transactions processed",
+    "workflowFilePath": "Main.xaml"
+  }
+]

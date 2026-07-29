@@ -1,0 +1,12 @@
+2024-07-10 09:00:00.000 | INFO  | Bot: PO_Processing_Main | Session: AA-SESSION-20240710-001 | Started
+2024-07-10 09:00:02.000 | INFO  | [Excel Basic - Open Spreadsheet] File: C:\RPA\Data\PurchaseOrders.xlsx opened
+2024-07-10 09:00:04.000 | INFO  | [Excel Basic - Get Cell] Sheet: Orders, Range: A2:G50 - 48 rows loaded
+2024-07-10 09:00:06.000 | INFO  | Loop: Processing PO row 1 of 48 | PO Number: PO-2024-0550
+2024-07-10 09:00:08.000 | INFO  | [Browser - Open Browser] Navigating to http://sap.company.com - Page loaded
+2024-07-10 09:00:10.000 | INFO  | [Object Cloning - Click] Clicked: btnLogin | Login successful
+2024-07-10 09:00:12.000 | INFO  | [Object Cloning - Set Text] Set inputPONumber: PO-2024-0550
+2024-07-10 09:00:14.000 | INFO  | [Object Cloning - Click] Clicked: btnSubmitPO
+2024-07-10 09:00:16.000 | INFO  | [String - Trim] Confirmation code trimmed: CONF-7732
+2024-07-10 09:00:18.000 | INFO  | [Log to File] PO-2024-0550 submitted. Amount: $12500.00 - Status: Approved
+2024-07-10 09:01:00.000 | INFO  | Loop completed | 48 POs processed | 0 errors
+2024-07-10 09:01:02.000 | INFO  | Bot: PO_Processing_Main | Status: Completed | Duration: 62s | Items: 48

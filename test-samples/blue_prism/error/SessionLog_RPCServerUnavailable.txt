@@ -1,0 +1,18 @@
+2024-05-21 10:15:00.000 | INFO  | Session started | Resource: BP-ROBOT-02 | Process: Employee_Onboarding_v2
+2024-05-21 10:15:02.000 | INFO  | [Main Page] Stage: Initialise | Employee Onboarding Process Started
+2024-05-21 10:15:05.000 | INFO  | [Main Page] Stage: Open HR Portal | Navigating to https://hr.company.com/portal
+2024-05-21 10:15:08.000 | INFO  | [Main Page] Stage: Read Employee Data | Reading EmployeeList.xlsx
+2024-05-21 10:15:10.000 | INFO  | [Main Page] Stage: Read Employee Data | 8 rows read
+2024-05-21 10:15:12.000 | INFO  | [Main Page] Stage: For Each Employee | Processing employee 1/8: Jane Doe
+2024-05-21 10:15:14.000 | INFO  | [HR_Portal_BO - Create Employee] Stage: Navigate to Employee Form | OK
+2024-05-21 10:15:16.000 | INFO  | [HR_Portal_BO - Create Employee] Stage: Enter First Name | Jane
+2024-05-21 10:15:17.000 | INFO  | [HR_Portal_BO - Create Employee] Stage: Enter Last Name | Doe
+2024-05-21 10:15:19.000 | INFO  | [HR_Portal_BO - Create Employee] Stage: Click Save | EMP-20240521-001
+2024-05-21 10:15:21.000 | INFO  | [Main Page] Stage: Navigate to Benefits Page | Attempting Internet Explorer launch
+2024-05-21 10:15:23.000 | ERROR | [Main Page] Stage: Navigate to Benefits Page | EXCEPTION: Internal : The RPC server is unavailable. (Exception from HRESULT: 0x800706BA)
+2024-05-21 10:15:23.000 | ERROR | Detail: System.Runtime.InteropServices.COMException (0x800706BA): The RPC server is unavailable.
+2024-05-21 10:15:23.000 | ERROR |    at BluePrism.BrowserAutomation.InternetExplorer.Launch(String url)
+2024-05-21 10:15:23.000 | ERROR |    at BluePrism.AutomateC.Application.Navigate(String action, String url)
+2024-05-21 10:15:23.000 | ERROR |    at BluePrism.Core.StageNavigation.Execute(Process process, CalcEngine calc)
+2024-05-21 10:15:24.000 | WARN  | [Exception Handler] Stage: Recover | Attempting recovery from RPC error
+2024-05-21 10:15:25.000 | ERROR | Session terminated | Status: Failed | Reason: RPC server unavailable | Duration: 25s

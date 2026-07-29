@@ -1,0 +1,107 @@
+[
+  {
+    "timeStamp": "2024-06-15T14:30:00.000+0000",
+    "level": "INFO",
+    "message": "Process started",
+    "workflowFilePath": "Main.xaml"
+  },
+  {
+    "timeStamp": "2024-06-15T14:30:03.000+0000",
+    "level": "INFO",
+    "message": "Init state started",
+    "workflowFilePath": "Main.xaml",
+    "activityInfo": {
+      "Name": "InitAllSettings"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T14:30:06.000+0000",
+    "level": "INFO",
+    "message": "Credentials loaded from Orchestrator Asset: SAPCredential",
+    "workflowFilePath": "Main.xaml",
+    "activityInfo": {
+      "Name": "GetAppCredential"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T14:30:09.000+0000",
+    "level": "INFO",
+    "message": "Transaction data state started",
+    "workflowFilePath": "Main.xaml",
+    "activityInfo": {
+      "Name": "GetTransactionData"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T14:30:11.000+0000",
+    "level": "WARN",
+    "message": "Queue InvoiceQueue returned no items. in_TransactionItem will be Nothing.",
+    "workflowFilePath": "Main.xaml",
+    "activityInfo": {
+      "Name": "GetTransactionData"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T14:30:13.000+0000",
+    "level": "INFO",
+    "message": "Process Transaction state started",
+    "workflowFilePath": "Main.xaml"
+  },
+  {
+    "timeStamp": "2024-06-15T14:30:15.000+0000",
+    "level": "INFO",
+    "message": "SAP browser launched",
+    "workflowFilePath": "Process.xaml",
+    "activityInfo": {
+      "Name": "Open SAP"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T14:30:18.000+0000",
+    "level": "INFO",
+    "message": "Invoice number field typed",
+    "workflowFilePath": "Process.xaml",
+    "activityInfo": {
+      "Name": "Enter Invoice Number"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T14:30:20.000+0000",
+    "level": "INFO",
+    "message": "Reading invoice data from Excel workbook",
+    "workflowFilePath": "Process.xaml",
+    "activityInfo": {
+      "Name": "Read Invoice Data"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T14:30:22.000+0000",
+    "level": "ERROR",
+    "message": "Invoke Process.xaml: NullReferenceException - Object reference not set to an instance of an object.",
+    "workflowFilePath": "Process.xaml",
+    "activityInfo": {
+      "Name": "Extract Invoice Amount"
+    },
+    "Exception": {
+      "ExceptionType": "System.NullReferenceException",
+      "Message": "Object reference not set to an instance of an object. Variable 'in_TransactionItem' is Nothing. Cannot call SpecificContent(\"Amount\") on a null QueueItem.",
+      "Source": "Process.xaml",
+      "StackTrace": "   at UiPath.Activities.Assign.Execute() in Process.xaml line 12\n   at UiPath.Activities.Sequence.Execute() in Process.xaml\n   at UiPath.Core.Activities.InvokeWorkflowFile.Execute() in Main.xaml line 34"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T14:30:23.000+0000",
+    "level": "ERROR",
+    "message": "Transaction TXN-20240615-002 set to Application Exception",
+    "workflowFilePath": "Main.xaml",
+    "activityInfo": {
+      "Name": "SetTransactionStatus"
+    }
+  },
+  {
+    "timeStamp": "2024-06-15T14:30:25.000+0000",
+    "level": "INFO",
+    "message": "Process ended with errors. Failed: 1",
+    "workflowFilePath": "Main.xaml"
+  }
+]
