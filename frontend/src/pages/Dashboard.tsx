@@ -4,11 +4,12 @@ import {
   AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { Activity, CheckCircle, XCircle, Clock, Upload, ArrowRight } from 'lucide-react'
+import { Activity, CheckCircle, XCircle, Clock, Upload, ArrowRight, FileText, Cpu } from 'lucide-react'
 import { listAnalyses } from '../api/analysis'
 import { listProjects } from '../api/projects'
 import PlatformBadge from '../components/PlatformBadge'
 import { format } from 'date-fns'
+import clsx from 'clsx'
 
 const PLATFORM_COLORS: Record<string, string> = {
   uipath:              '#ff6900',
@@ -23,6 +24,15 @@ const SEVERITY_COLOR: Record<string, string> = {
   high:     'text-orange-700 bg-orange-50',
   medium:   'text-yellow-800 bg-yellow-50',
   low:      'text-green-700 bg-green-50',
+}
+
+const RPA_TOOL_COLORS: Record<string, string> = {
+  'UiPath':                    '#ff6900',
+  'Blue Prism':                '#8a3ffc',
+  'Automation Anywhere':       '#ff7eb6',
+  'Power Automate Desktop':    '#0f62fe',
+  'Power Automate Cloud':      '#2563eb',
+  'Unknown':                   '#8d8d8d',
 }
 
 export default function Dashboard() {
@@ -45,6 +55,10 @@ export default function Dashboard() {
   const pending = items.filter(a => ['pending', 'parsing', 'analyzing'].includes(a.status)).length
   const successRate = total > 0 ? Math.round((completed / total) * 100) : 0
 
+  // has_log ratio
+  const withLog    = items.filter(a => a.has_log).length
+  const logRatioPct = total > 0 ? Math.round((withLog / total) * 100) : 0
+
   // Platform distribution
   const platformCounts: Record<string, number> = {}
   items.forEach(a => {
@@ -52,6 +66,18 @@ export default function Dashboard() {
     platformCounts[p] = (platformCounts[p] || 0) + 1
   })
   const pieData = Object.entries(platformCounts).map(([name, value]) => ({ name, value }))
+
+  // RPA tool distribution (from completed analyses that have rpa_tool)
+  const rpaToolCounts: Record<string, number> = {}
+  items.forEach(a => {
+    const t = a.rpa_tool || (a.ai_narrative?.rpa_tool) || ''
+    if (t) {
+      rpaToolCounts[t] = (rpaToolCounts[t] || 0) + 1
+    }
+  })
+  const rpaToolData = Object.entries(rpaToolCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
 
   // Activity over last 7 days
   const now = new Date()
@@ -78,10 +104,10 @@ export default function Dashboard() {
       {/* ── Stat tiles — Carbon style ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-carbon-20 border border-carbon-20">
         {[
-          { label: 'Total Analyses', value: total,          icon: Activity,     color: 'text-ibm-blue60',  bg: 'bg-ibm-blue10'  },
-          { label: 'Completed',      value: completed,      icon: CheckCircle,  color: 'text-green-700',   bg: 'bg-green-50'    },
-          { label: 'Failed',         value: failed,         icon: XCircle,      color: 'text-red-700',     bg: 'bg-red-50'      },
-          { label: 'Success Rate',   value: `${successRate}%`, icon: Clock,     color: 'text-purple-700',  bg: 'bg-purple-50'   },
+          { label: 'Total Analyses', value: total,           icon: Activity,     color: 'text-ibm-blue60',  bg: 'bg-ibm-blue10'  },
+          { label: 'Completed',      value: completed,       icon: CheckCircle,  color: 'text-green-700',   bg: 'bg-green-50'    },
+          { label: 'Failed',         value: failed,          icon: XCircle,      color: 'text-red-700',     bg: 'bg-red-50'      },
+          { label: 'Success Rate',   value: `${successRate}%`, icon: Clock,      color: 'text-purple-700',  bg: 'bg-purple-50'   },
         ].map(s => (
           <div key={s.label} className="bg-white p-5 flex items-center gap-4">
             <div className={`w-10 h-10 ${s.bg} flex items-center justify-center flex-shrink-0`}>
@@ -93,6 +119,70 @@ export default function Dashboard() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* ── Log coverage + RPA tool row ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* Log coverage card */}
+        <div className="card p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <FileText size={14} className="text-carbon-50" />
+            <h3 className="text-sm font-semibold text-carbon-90">Log Coverage</h3>
+          </div>
+          <div className="flex items-end gap-3 mb-2">
+            <p className="text-3xl font-light text-ibm-blue60">{logRatioPct}%</p>
+            <p className="text-xs text-carbon-60 mb-1">of analyses included an execution log</p>
+          </div>
+          <div className="h-2 bg-carbon-10 overflow-hidden mb-2">
+            <div
+              className={clsx('h-full transition-all', logRatioPct >= 60 ? 'bg-green-500' : logRatioPct >= 30 ? 'bg-yellow-400' : 'bg-carbon-40')}
+              style={{ width: `${logRatioPct}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-carbon-50">
+            <span>{withLog} with log (runtime analysis)</span>
+            <span>{total - withLog} without log (static only)</span>
+          </div>
+          {logRatioPct < 60 && total > 0 && (
+            <p className="text-xs text-amber-700 bg-amber-50 px-2 py-1 mt-2">
+              Upload execution logs alongside projects for more accurate runtime diagnosis.
+            </p>
+          )}
+        </div>
+
+        {/* RPA Tool breakdown */}
+        <div className="card p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Cpu size={14} className="text-carbon-50" />
+            <h3 className="text-sm font-semibold text-carbon-90">RPA Tool Breakdown</h3>
+            <span className="text-2xs text-carbon-40 ml-1">(AI-identified)</span>
+          </div>
+          {rpaToolData.length > 0 ? (
+            <div className="space-y-2">
+              {rpaToolData.map(([tool, count]) => {
+                const pct = Math.round((count / total) * 100)
+                const color = RPA_TOOL_COLORS[tool] || '#8d8d8d'
+                return (
+                  <div key={tool} className="flex items-center gap-2">
+                    <div className="w-20 text-xs text-carbon-70 font-medium truncate">{tool}</div>
+                    <div className="flex-1 h-1.5 bg-carbon-10 overflow-hidden">
+                      <div
+                        className="h-full transition-all"
+                        style={{ width: `${pct}%`, background: color }}
+                      />
+                    </div>
+                    <span className="text-xs text-carbon-50 w-6 text-right">{count}</span>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="h-20 flex items-center justify-center text-carbon-40 text-xs">
+              No AI-identified tools yet — run analyses with an OpenAI key to see tool breakdown.
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Charts row ── */}
@@ -200,6 +290,9 @@ export default function Dashboard() {
                     <p className="text-sm font-medium text-carbon-100 truncate">{topCause?.title || 'Analysis #' + a.id.slice(0, 8)}</p>
                     <p className="text-xs text-carbon-60">{format(new Date(a.created_at), 'MMM d, yyyy HH:mm')}</p>
                   </div>
+                  {a.has_log && (
+                    <span className="badge bg-green-50 text-green-700 text-2xs">Log</span>
+                  )}
                   {topCause && (
                     <span className={`badge ${SEVERITY_COLOR[topCause.severity] || 'bg-carbon-20 text-carbon-70'}`}>
                       {topCause.severity}
