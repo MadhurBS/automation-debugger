@@ -55,7 +55,11 @@ class Settings(BaseSettings):
     REPORTS_DIR: str = "./reports"
 
     # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
+    CORS_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://192.168.31.152:3000",   # LAN access for team members
+    ]
 
     @field_validator("UPLOAD_DIR", "REPORTS_DIR", mode="after")
     @classmethod

@@ -36,37 +36,65 @@ class LogAnalyzer:
         if not path.exists():
             return {"format": "unknown", "entries": [], "error_count": 0, "warning_count": 0}
 
+        # Read the COMPLETE file — no size cap at read time
         content = path.read_text(encoding="utf-8", errors="ignore")
 
         # Detect format
         log_format = self._detect_format(content)
+
+        # Parse ALL entries from the full content
         entries = self._parse_entries(content, log_format)
 
+        # Extract ALL exceptions from ALL entries + raw content scan
         exceptions = self._extract_exceptions(entries, content)
+
+        # Build execution trace from ALL entries (errors/warnings only)
         execution_trace = self._build_execution_trace(entries)
+
+        # Build summary — includes ALL exceptions list
         exception_summary = self._build_exception_summary(exceptions)
 
-        error_count = sum(1 for e in entries if (e.get("level") or "").upper() in ("ERROR", "FATAL"))
+        error_count   = sum(1 for e in entries if (e.get("level") or "").upper() in ("ERROR", "FATAL"))
         warning_count = sum(1 for e in entries if (e.get("level") or "").upper() == "WARN")
 
         return {
-            "format": log_format,
-            "entries": entries[:500],
-            "exceptions": exceptions,
-            "execution_trace": execution_trace,
+            "format":           log_format,
+            "total_lines":      content.count("\n") + 1,
+            "total_entries":    len(entries),
+            "entries":          entries[:2000],   # store up to 2000 for display
+            "exceptions":       exceptions,        # ALL exceptions, no cap here
+            "execution_trace":  execution_trace,   # all error/warn entries
             "exception_summary": exception_summary,
-            "error_count": error_count,
-            "warning_count": warning_count,
+            "error_count":      error_count,
+            "warning_count":    warning_count,
         }
 
     def _detect_format(self, content: str) -> str:
         stripped = content.strip()
-        if stripped.startswith("[") and '"level"' in stripped[:200]:
+
+        # UiPath JSON array log
+        if stripped.startswith("[") and ('"level"' in stripped[:500] or '"Level"' in stripped[:500]):
             return "uipath_json_array"
-        if stripped.startswith("{") and '"level"' in stripped[:200]:
-            return "json_lines"
-        if re.search(r"\d{4}-\d{2}-\d{2}.*\|.*(INFO|WARN|ERROR|DEBUG|FATAL)", content[:500]):
+
+        # JSON Lines (one JSON object per line)
+        if stripped.startswith("{"):
+            first_line = stripped.split("\n")[0]
+            try:
+                import json as _json
+                obj = _json.loads(first_line)
+                if isinstance(obj, dict):
+                    return "json_lines"
+            except Exception:
+                pass
+
+        # NLog / structured text with timestamp | LEVEL | message pattern
+        if re.search(
+            r"\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}.{0,30}(INFO|WARN|WARNING|ERROR|DEBUG|FATAL|TRACE)",
+            content[:2000],
+            re.IGNORECASE,
+        ):
             return "nlog"
+
         return "text"
 
     def _parse_entries(self, content: str, log_format: str) -> list[dict]:
@@ -136,60 +164,131 @@ class LogAnalyzer:
         return entries
 
     def _parse_text(self, content: str) -> list[dict]:
+        """Parse plain-text log — reads ALL lines, no cap."""
         entries = []
         level_pattern = re.compile(r"\b(INFO|WARN|WARNING|ERROR|FATAL|DEBUG|CRITICAL)\b", re.IGNORECASE)
-        ts_pattern = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}")
+        ts_pattern    = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}")
 
-        for line in content.splitlines()[:2000]:
-            if not line.strip():
+        current_entry: dict | None = None
+
+        for line in content.splitlines():   # NO [:2000] cap — read all lines
+            stripped = line.strip()
+            if not stripped:
                 continue
-            level_match = level_pattern.search(line)
-            ts_match = ts_pattern.search(line)
-            entries.append({
-                "timestamp": ts_match.group() if ts_match else None,
-                "level": level_match.group().upper() if level_match else None,
-                "message": line.strip(),
-                "raw": line,
-            })
+
+            level_match = level_pattern.search(stripped)
+            ts_match    = ts_pattern.search(stripped)
+
+            # A new log line starts with a timestamp or a level keyword
+            if ts_match or level_match:
+                if current_entry:
+                    entries.append(current_entry)
+                current_entry = {
+                    "timestamp": ts_match.group() if ts_match else None,
+                    "level":     level_match.group().upper() if level_match else None,
+                    "message":   stripped,
+                    "raw":       line,
+                }
+            elif current_entry:
+                # Continuation line (stack trace, multi-line message) — append to current entry
+                current_entry["message"] = current_entry["message"] + "\n" + stripped
+                if stripped.startswith("at ") or stripped.startswith("--- "):
+                    # Stack trace line — append to stack_trace field
+                    current_entry.setdefault("stack_trace", "")
+                    current_entry["stack_trace"] = (
+                        current_entry["stack_trace"] + "\n" + stripped
+                    )[:4000]
+            else:
+                # No timestamp/level, no current entry — treat as standalone message
+                entries.append({
+                    "timestamp": None,
+                    "level":     None,
+                    "message":   stripped,
+                    "raw":       line,
+                })
+
+        if current_entry:
+            entries.append(current_entry)
+
         return entries
 
     def _extract_exceptions(self, entries: list[dict], raw_content: str) -> list[dict]:
-        exceptions = []
+        """
+        Extract ALL exceptions from ALL entries + raw stack-trace scan.
+        No artificial cap on number of exceptions collected.
+        """
+        exceptions: list[dict] = []
+        seen_keys: set[tuple] = set()
 
-        # Extract from structured entries
+        def _add(exc: dict) -> None:
+            key = (exc.get("type", ""), (exc.get("message") or "")[:120])
+            if key not in seen_keys:
+                seen_keys.add(key)
+                exceptions.append(exc)
+
+        # ── Pass 1: structured fields (JSON-based log formats) ─────────────
         for entry in entries:
             if entry.get("exception_type"):
-                exceptions.append({
-                    "type": entry["exception_type"],
-                    "message": entry.get("exception_message") or entry.get("message") or "",
-                    "timestamp": entry.get("timestamp"),
-                    "workflow": entry.get("workflow"),
-                    "activity": entry.get("activity"),
+                _add({
+                    "type":       entry["exception_type"],
+                    "message":    entry.get("exception_message") or entry.get("message") or "",
+                    "timestamp":  entry.get("timestamp"),
+                    "workflow":   entry.get("workflow"),
+                    "activity":   entry.get("activity"),
                     "stack_trace": entry.get("stack_trace"),
                 })
-            elif entry.get("level") in ("ERROR", "FATAL") and entry.get("message"):
-                exc_type = self._guess_exception_type(entry["message"])
-                if exc_type:
-                    exceptions.append({
-                        "type": exc_type,
-                        "message": entry["message"],
-                        "timestamp": entry.get("timestamp"),
-                        "workflow": entry.get("workflow"),
-                        "activity": entry.get("activity"),
+
+        # ── Pass 2: ERROR/FATAL entries in ALL formats ─────────────────────
+        for entry in entries:
+            if entry.get("level") in ("ERROR", "FATAL") and entry.get("message"):
+                msg = entry["message"]
+                exc_type = self._guess_exception_type(msg)
+                # Also detect inline exception type from the message text
+                inline_match = re.search(
+                    r"([A-Z][a-zA-Z0-9]*(?:Exception|Error))", msg
+                )
+                if not exc_type and inline_match:
+                    exc_type = inline_match.group(1)
+                if exc_type or entry.get("level") == "FATAL":
+                    _add({
+                        "type":       exc_type or "RuntimeError",
+                        "message":    msg[:1000],
+                        "timestamp":  entry.get("timestamp"),
+                        "workflow":   entry.get("workflow"),
+                        "activity":   entry.get("activity"),
+                        "stack_trace": entry.get("stack_trace"),
                     })
 
-        # Scan raw content for stack traces
+        # ── Pass 3: raw full-content stack-trace scan ──────────────────────
+        # Scan the COMPLETE raw content (no line cap) for exception blocks
         stack_blocks = re.findall(
-            r"((?:\w+Exception|Exception)[^\n]{0,200}\n(?:\s+at [^\n]+\n){1,20})",
+            r"((?:[A-Z][a-zA-Z0-9]*(?:Exception|Error))[^\n]{0,500}"
+            r"(?:\n[ \t]+at [^\n]+){1,30})",
             raw_content,
+            re.MULTILINE,
         )
-        for block in stack_blocks[:10]:
-            exc_type = block.split(":")[0].strip().split()[-1]
-            if not any(e["type"] == exc_type for e in exceptions):
-                exceptions.append({
-                    "type": exc_type,
-                    "message": block.split("\n")[0][:300],
-                    "stack_trace": block[:1000],
+        for block in stack_blocks:
+            first_line = block.split("\n")[0]
+            exc_match  = re.match(r"([A-Z][a-zA-Z0-9]*(?:Exception|Error))", first_line)
+            exc_type   = exc_match.group(1) if exc_match else "UnknownException"
+            _add({
+                "type":        exc_type,
+                "message":     first_line[:500],
+                "stack_trace": block[:3000],
+            })
+
+        # ── Pass 4: scan every line for exception keywords (text logs) ─────
+        for entry in entries:
+            msg = entry.get("message") or ""
+            inline = re.search(r"([A-Z][a-zA-Z0-9]*(?:Exception|Error))[\s:]+(.+)", msg)
+            if inline:
+                _add({
+                    "type":      inline.group(1),
+                    "message":   inline.group(2).strip()[:500],
+                    "timestamp": entry.get("timestamp"),
+                    "workflow":  entry.get("workflow"),
+                    "activity":  entry.get("activity"),
+                    "stack_trace": entry.get("stack_trace"),
                 })
 
         return exceptions
@@ -201,24 +300,37 @@ class LogAnalyzer:
         return None
 
     def _build_execution_trace(self, entries: list[dict]) -> list[dict]:
-        """Build a condensed execution path from log entries."""
+        """
+        Build execution trace from ALL entries — no cap on entries read.
+        Includes every ERROR, FATAL, WARN, and exception-carrying entry.
+        """
         trace = []
-        for entry in entries:
+        for entry in entries:   # ALL entries, no slice
             level = (entry.get("level") or "").upper()
             if level in ("ERROR", "FATAL", "WARN") or entry.get("exception_type"):
                 trace.append({
-                    "timestamp": entry.get("timestamp"),
-                    "level": level,
-                    "message": (entry.get("message") or "")[:200],
-                    "workflow": entry.get("workflow"),
-                    "activity": entry.get("activity"),
-                    "is_error": level in ("ERROR", "FATAL"),
+                    "timestamp":      entry.get("timestamp"),
+                    "level":          level,
+                    "message":        (entry.get("message") or "")[:500],
+                    "workflow":       entry.get("workflow"),
+                    "activity":       entry.get("activity"),
+                    "exception_type": entry.get("exception_type"),
+                    "stack_trace":    (entry.get("stack_trace") or "")[:2000],
+                    "is_error":       level in ("ERROR", "FATAL"),
                 })
-        return trace[:100]
+        return trace   # return ALL — no [:100] cap
 
     def _build_exception_summary(self, exceptions: list[dict]) -> dict[str, Any]:
+        """
+        Build summary including ALL exceptions list so rca_engine can read them.
+        Critical fix: 'all_exceptions' was missing — engine was reading it but
+        it was never populated, causing empty exception data despite log content.
+        """
         if not exceptions:
-            return {"total": 0, "by_type": {}, "most_common": None, "most_recent": None}
+            return {
+                "total": 0, "by_type": {}, "most_common": None,
+                "most_recent": None, "primary_exception": None, "all_exceptions": [],
+            }
 
         by_type: dict[str, int] = {}
         for exc in exceptions:
@@ -226,12 +338,12 @@ class LogAnalyzer:
             by_type[t] = by_type.get(t, 0) + 1
 
         most_common = max(by_type, key=lambda k: by_type[k])
-        most_recent = exceptions[-1] if exceptions else None
 
         return {
-            "total": len(exceptions),
-            "by_type": by_type,
-            "most_common": most_common,
-            "most_recent": most_recent,
-            "primary_exception": exceptions[0] if exceptions else None,
+            "total":             len(exceptions),
+            "by_type":           by_type,
+            "most_common":       most_common,
+            "most_recent":       exceptions[-1],
+            "primary_exception": exceptions[0],
+            "all_exceptions":    exceptions,   # ← CRITICAL: full list for rca_engine
         }

@@ -1,0 +1,14 @@
+2024-07-11 14:45:00.000 | INFO  | Bot: PO_Processing_Main | Session: AA-SESSION-20240711-003 | Started
+2024-07-11 14:45:02.000 | INFO  | [Excel Basic - Open Spreadsheet] File: C:\RPA\Data\PurchaseOrders.xlsx opened
+2024-07-11 14:45:04.000 | INFO  | [Excel Basic - Get Cell] Sheet: Orders - 48 rows loaded
+2024-07-11 14:45:06.000 | INFO  | Loop: Processing PO row 1 | PO Number: PO-2024-0598
+2024-07-11 14:45:08.000 | INFO  | [Browser - Open Browser] http://sap.company.com - Page loaded
+2024-07-11 14:45:10.000 | INFO  | [Object Cloning - Click] Clicking btnLogin_v1 - Login OK
+2024-07-11 14:45:11.000 | INFO  | [Object Cloning - Set Text] Locating object: inputPO_old_id_9F2A
+2024-07-11 14:45:13.000 | ERROR | [Object Cloning - Set Text] ObjectNotFoundException: Unable to find object 'inputPO_old_id_9F2A' on screen.
+2024-07-11 14:45:13.000 | ERROR | Detail: HTML ID 'inputPO_old_id_9F2A' does not exist. SAP portal upgraded on 2024-07-11. New ID is 'input_PONumber_v2'.
+2024-07-11 14:45:13.000 | ERROR |    at AA.ObjectCloning.FindElement(ObjectProperties props)
+2024-07-11 14:45:13.000 | ERROR |    at AA.ObjectCloning.SetText(String value)
+2024-07-11 14:45:13.000 | ERROR |    at AA.TaskEngine.ExecuteAction(BotAction action) [step 4 of PO_Processing_Main]
+2024-07-11 14:45:14.000 | WARN  | No error handler configured for this task - bot will terminate
+2024-07-11 14:45:15.000 | ERROR | Bot: PO_Processing_Main | Status: Failed | Error: ObjectNotFoundException | Duration: 15s

@@ -43,15 +43,72 @@ export interface AnalysisStatus {
   error_message?: string
 }
 
+export interface LogCorrelation {
+  exception_type: string
+  message: string
+  timestamp: string
+  matched_workflow: string
+  matched_activity: string
+  stack_trace_snippet: string
+}
+
+export interface ProjectSummary {
+  name?: string
+  workflow_count?: number
+  workflow_names?: string[]
+  package_names?: string[]
+  metadata?: Record<string, string>
+}
+
+export interface RuntimeAnalysis {
+  has_log: boolean
+  exception_type: string
+  error_message: string
+  failed_workflow: string
+  failed_activity: string
+  timestamp: string
+  root_cause_summary: string
+  evidence_from_log: string[]
+  suggested_fixes: string[]
+  validation_steps: string[]
+  failure_category: string
+  all_exceptions: Record<string, string>[]
+}
+
+export interface AINarrativeCause {
+  title: string
+  affected_workflow: string | null
+  affected_activity: string | null
+  what_was_happening: string | null
+  why_it_failed: string | null
+  failure_category: string | null
+  confidence_label: string | null
+  confidence_reasoning: string | null
+  suggested_checks: string[]
+  suggested_fix: string | null
+}
+
+export interface AINarrative {
+  rpa_tool?: string
+  runtime_error_summary?: string
+  root_causes_detail?: AINarrativeCause[]
+}
+
 export interface AnalysisReport extends AnalysisStatus {
   platform: string
   overall_confidence?: number
   ai_used: boolean
+  has_log?: boolean
+  rpa_tool?: string
+  ai_narrative?: AINarrative
   root_causes?: { causes: RootCause[] }
   recommendations?: { items: string[] }
   standards_violations?: { violations: StandardsViolation[]; summary: string; passed_rules: string[] }
   code_errors?: { errors: CodeError[]; total: number }
   standards_score?: number
+  log_correlation?: { correlations: LogCorrelation[] }
+  project_summary?: ProjectSummary
+  runtime_analysis?: RuntimeAnalysis
   pdf_path?: string
   excel_path?: string
 }

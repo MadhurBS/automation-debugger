@@ -1,0 +1,16 @@
+2024-05-20 08:00:00.000 | INFO  | Session started | Resource: BP-ROBOT-01 | Process: Employee_Onboarding
+2024-05-20 08:00:02.000 | INFO  | [Main Page] Stage: Initialise | Employee Onboarding Process Started
+2024-05-20 08:00:04.000 | INFO  | [Main Page] Stage: Open HR Portal | Navigating to https://hr.company.com/portal
+2024-05-20 08:00:07.000 | INFO  | [Main Page] Stage: Read Employee Data | Reading EmployeeList.xlsx Sheet: New Hires
+2024-05-20 08:00:09.000 | INFO  | [Main Page] Stage: Read Employee Data | 12 rows read successfully
+2024-05-20 08:00:11.000 | INFO  | [Main Page] Stage: For Each Employee | Processing employee 1/12: John Smith
+2024-05-20 08:00:14.000 | INFO  | [HR_Portal_BO - Create Employee] Stage: Navigate to Employee Form | /employees/new
+2024-05-20 08:00:16.000 | INFO  | [HR_Portal_BO - Create Employee] Stage: Enter First Name | John
+2024-05-20 08:00:17.000 | INFO  | [HR_Portal_BO - Create Employee] Stage: Enter Last Name | Smith
+2024-05-20 08:00:18.000 | INFO  | [HR_Portal_BO - Create Employee] Stage: Enter Email | j.smith@company.com
+2024-05-20 08:00:19.000 | INFO  | [HR_Portal_BO - Create Employee] Stage: Click Save | Record saved
+2024-05-20 08:00:20.000 | INFO  | [HR_Portal_BO - Create Employee] Stage: Get Employee ID | EMP-20240520-001
+2024-05-20 08:00:22.000 | INFO  | [Main Page] Stage: Send Welcome Email | Email sent to j.smith@company.com
+2024-05-20 08:00:24.000 | INFO  | [Main Page] Stage: Log Success | Employee onboarded: John Smith (EMP-20240520-001)
+2024-05-20 08:00:50.000 | INFO  | [Main Page] Stage: For Each Employee | All 12 employees processed
+2024-05-20 08:00:52.000 | INFO  | Session completed | Duration: 52s | Status: Success | Items: 12
