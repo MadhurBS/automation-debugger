@@ -244,7 +244,9 @@ class RCAEngine:
             pasted = self._parse_pasted_error(pasted_error_text)
             exception_data = pasted + exception_data
 
-        has_log = bool(exception_data)
+        # has_log = True whenever a log file was actually uploaded OR pasted,
+        # even if the log has zero exceptions (success run).
+        has_log = bool(log_files) or bool(pasted_error_text and pasted_error_text.strip())
 
         # ── Log correlation (always runs when exceptions exist) ──────────────
         log_correlation = self._correlate_log_to_project(exception_data, project_info)
@@ -460,8 +462,30 @@ class RCAEngine:
         project_info: dict,
         log_files: list[Any],
     ) -> RuntimeAnalysis:
-        ra = RuntimeAnalysis(has_log=bool(exceptions))
+        # has_log reflects whether a log was provided, independent of exception count.
+        ra = RuntimeAnalysis(has_log=bool(log_files))
         if not exceptions:
+            # Success scenario — log uploaded but no errors detected
+            if log_files:
+                total_entries = sum(
+                    len((getattr(lf, "parsed_entries", None) or {}).get("entries", []))
+                    for lf in log_files
+                )
+                ra.root_cause_summary = (
+                    "No exceptions detected in the uploaded log — the automation ran successfully."
+                )
+                ra.evidence_from_log = [
+                    f"Log file(s): {', '.join(getattr(lf, 'filename', '?') for lf in log_files)}",
+                    f"Total log entries parsed: {total_entries}",
+                    "No ERROR or FATAL entries found.",
+                    "No exceptions extracted.",
+                ]
+                ra.suggested_fixes = ["No fixes required — execution completed without errors."]
+                ra.validation_steps = [
+                    "Review the log entries to confirm all expected steps executed.",
+                    "Verify the output/results of the automation are as expected.",
+                ]
+                ra.failure_category = "None — Success"
             return ra
 
         primary = exceptions[0]
