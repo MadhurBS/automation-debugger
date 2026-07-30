@@ -95,7 +95,7 @@ automation-debugger/
 - 🤖 **AI-powered analysis**: GPT-4 identifies root causes with 11-point structured output
 - 🛡️ **Heuristic fallback**: Full analysis works without an OpenAI key
 - 📋 **Log-first diagnosis**: Execution log is the primary evidence source — no guessing
-- 📊 **5-tab results view**: Runtime Analysis · RCA · Coding Standards · Code Errors · Log Correlation
+- 📊 **3-tab results view**: Root Cause Analysis · Coding Standards · Code Errors
 - 📥 **Report exports**: PDF and Excel downloads (runtime analysis + AI narrative included)
 - 📈 **Rich dashboard**: Charts, platform breakdown, activity timeline, has-log ratio
 - 👥 **JWT authentication**: Multi-user with role-based access
