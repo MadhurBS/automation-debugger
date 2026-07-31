@@ -6,6 +6,7 @@ Inspects parsed project structure and flags activities/stages that violate
 common RPA best-practice coding standards for each supported platform.
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -106,6 +107,36 @@ UIPATH_RULES = [
         "sev": "high",
         "rec": "Replace volatile attributes (idx, title) with wildcards (*) in selectors to improve robustness.",
     },
+    {
+        "id": "UP011", "name": "Variable Without Default Value",
+        "desc": "One or more variables are declared without a default value and may be used before being assigned, risking a NullReferenceException at runtime.",
+        "sev": "medium",
+        "rec": "Set a safe default value (empty string, 0, Nothing) on every variable declaration, or add an initialisation Assign activity before first use.",
+    },
+    {
+        "id": "UP012", "name": "Parallel Activity Without Isolation Guard",
+        "desc": "A Parallel or ParallelForEach activity was found without an obvious isolation pattern (separate scopes or independent variables per branch), which is a static proxy for potential race conditions on shared variables.",
+        "sev": "high",
+        "rec": "Ensure each parallel branch operates on its own copy of data. Avoid writing to shared variables inside parallel branches. Use separate argument-scoped sub-workflows per branch.",
+    },
+    {
+        "id": "UP013", "name": "DataTable Loop Without Null/Empty Check",
+        "desc": "A ForEachRow activity iterates over a DataTable without a preceding null or row-count validation, which will crash at runtime if the DataTable is empty or uninitialised.",
+        "sev": "high",
+        "rec": "Add an 'If dt Is Nothing OrElse dt.Rows.Count = 0' check before every ForEachRow activity.",
+    },
+    {
+        "id": "UP014", "name": "Hardcoded Delay / Sleep Value",
+        "desc": "A Delay activity uses a hardcoded wait duration instead of a configuration-driven value, making the automation fragile and hard to tune without code changes.",
+        "sev": "low",
+        "rec": "Replace hardcoded Delay durations with values read from a Config dictionary or Orchestrator Asset so they can be adjusted without modifying the workflow.",
+    },
+    {
+        "id": "UP015", "name": "Queue Item Read Without Field Validation",
+        "desc": "A GetTransactionItem or queue-read activity is not followed by field validation before the transaction data is used in processing, risking runtime errors from malformed queue items.",
+        "sev": "medium",
+        "rec": "After GetTransactionItem, validate that all required SpecificContent fields exist and are non-null before passing data to the Process workflow.",
+    },
 ]
 
 POWER_AUTOMATE_RULES = [
@@ -159,6 +190,12 @@ BLUE_PRISM_RULES = [
         "desc": "One or more stages have default or empty names.",
         "sev": "low",
         "rec": "Name all stages descriptively to improve readability and maintainability.",
+    },
+    {
+        "id": "BP005", "name": "Parallel Threads Without Synchronise Stage",
+        "desc": "The process contains multiple parallel execution paths but no Synchronise or Wait stage was detected, risking race conditions on shared data items or application state.",
+        "sev": "high",
+        "rec": "Add a Synchronise (Anchor) stage after all parallel branches to ensure shared data is only accessed after all threads have completed.",
     },
 ]
 
@@ -336,6 +373,146 @@ class StandardsChecker:
                     platform="uipath",
                 ))
 
+            # UP011 — variables without default values
+            variables: list[dict] = wf.get("variables", [])
+            no_default = [
+                v.get("name", "unnamed") for v in variables
+                if not v.get("default") and v.get("name")
+            ]
+            if no_default:
+                result.violations.append(StandardsViolation(
+                    rule_id="UP011", rule_name="Variable Without Default Value",
+                    severity="medium",
+                    description=(
+                        f"Workflow '{filename}' has {len(no_default)} variable(s) with no default value "
+                        f"({', '.join(no_default[:5])}{'...' if len(no_default) > 5 else ''}), "
+                        "risking NullReferenceException if used before assignment."
+                    ),
+                    location=filename, location_type="activity",
+                    recommendation="Set a safe default (empty string, 0, Nothing) on every variable, or add an Assign before first use.",
+                    platform="uipath",
+                ))
+            else:
+                result.passed_rules.append(f"UP011:{filename}")
+
+            # UP012 — Parallel / ParallelForEach without isolation guard
+            parallel_acts = [
+                a for a in flat
+                if "parallel" in a.get("name", "").lower()
+            ]
+            for par in parallel_acts:
+                children = par.get("children", [])
+                # Heuristic: if children share variable names used across multiple branches
+                # (detected as duplicate display_names in sibling branches), flag it.
+                # Simpler proxy: Parallel with no InvokeWorkflowFile children (not isolated)
+                child_names = [c.get("name", "").lower() for c in children]
+                has_isolated_branches = any(
+                    "invoke" in n or "sequence" in n for n in child_names
+                )
+                if not has_isolated_branches and len(children) > 1:
+                    result.violations.append(StandardsViolation(
+                        rule_id="UP012", rule_name="Parallel Activity Without Isolation Guard",
+                        severity="high",
+                        description=(
+                            f"Workflow '{filename}' uses a Parallel/ParallelForEach activity "
+                            "whose branches do not appear to be isolated in separate invoked workflows or scopes. "
+                            "This is a static proxy for potential race conditions on shared variables."
+                        ),
+                        location=filename, location_type="activity",
+                        recommendation=(
+                            "Refactor each parallel branch into a separate Invoke Workflow File call "
+                            "passing data as arguments, so branches cannot share variable state."
+                        ),
+                        platform="uipath",
+                    ))
+
+            # UP013 — ForEachRow without preceding null/empty check
+            for i, act in enumerate(flat):
+                act_name = act.get("name", "").lower()
+                act_disp = act.get("display_name", "").lower()
+                if "foreachrow" in act_name or "for each row" in act_disp or "foreachrow" in act_disp:
+                    # Check if the 3 activities before this one contain an If/Should/Condition guard
+                    preceding = flat[max(0, i - 3): i]
+                    has_guard = any(
+                        any(kw in a.get("name", "").lower() or kw in a.get("display_name", "").lower()
+                            for kw in ("if", "condition", "isnull", "isnothing", "check", "validate", "guard"))
+                        for a in preceding
+                    )
+                    if not has_guard:
+                        result.violations.append(StandardsViolation(
+                            rule_id="UP013", rule_name="DataTable Loop Without Null/Empty Check",
+                            severity="high",
+                            description=(
+                                f"Workflow '{filename}' uses ForEachRow on activity "
+                                f"'{act.get('display_name', act.get('name', ''))}' "
+                                "without a preceding null or row-count validation. "
+                                "This will throw at runtime if the DataTable is empty or uninitialised."
+                            ),
+                            location=filename, location_type="activity",
+                            recommendation=(
+                                "Add 'If dt Is Nothing OrElse dt.Rows.Count = 0 Then [handle empty]' "
+                                "immediately before the ForEachRow activity."
+                            ),
+                            platform="uipath",
+                        ))
+
+            # UP014 — Hardcoded Delay values
+            for act in flat:
+                if "delay" in act.get("name", "").lower() or "delay" in act.get("display_name", "").lower():
+                    # If the display name is just "Delay" with no config reference, flag it
+                    disp = act.get("display_name", "")
+                    if disp.lower().strip() in ("delay", "wait", "sleep") or re.match(r"^delay\s*\d", disp.lower()):
+                        result.violations.append(StandardsViolation(
+                            rule_id="UP014", rule_name="Hardcoded Delay / Sleep Value",
+                            severity="low",
+                            description=(
+                                f"Workflow '{filename}' contains a Delay activity ('{disp}') "
+                                "with what appears to be a hardcoded wait value rather than a config-driven duration."
+                            ),
+                            location=filename, location_type="activity",
+                            recommendation=(
+                                "Read the delay duration from a Config dictionary key or Orchestrator Asset "
+                                "so it can be tuned without modifying the workflow."
+                            ),
+                            platform="uipath",
+                        ))
+
+            # UP015 — Queue read without field validation
+            for i, act in enumerate(flat):
+                act_name = act.get("name", "").lower()
+                act_disp = act.get("display_name", "").lower()
+                if (
+                    "gettransactionitem" in act_name
+                    or "get transaction" in act_disp
+                    or "gettransaction" in act_name
+                    or "dequeue" in act_name
+                ):
+                    # Look at the 5 activities after the queue read for a validation guard
+                    following = flat[i + 1: i + 6]
+                    has_validation = any(
+                        any(kw in a.get("name", "").lower() or kw in a.get("display_name", "").lower()
+                            for kw in ("if", "condition", "validate", "check", "isnull", "isnothing", "guard", "verify"))
+                        for a in following
+                    )
+                    if not has_validation:
+                        result.violations.append(StandardsViolation(
+                            rule_id="UP015", rule_name="Queue Item Read Without Field Validation",
+                            severity="medium",
+                            description=(
+                                f"Workflow '{filename}' reads a queue transaction item "
+                                f"('{act.get('display_name', act.get('name', ''))}') "
+                                "but no field validation activity was detected immediately after. "
+                                "Malformed queue items will cause runtime crashes in the Process workflow."
+                            ),
+                            location=filename, location_type="activity",
+                            recommendation=(
+                                "After GetTransactionItem, validate that all required SpecificContent fields "
+                                "are non-null before passing data to Process. "
+                                "Throw a BusinessRuleException for invalid items so they are retried/failed cleanly."
+                            ),
+                            platform="uipath",
+                        ))
+
         # UP001 — Main has no try-catch
         if main_wf:
             flat_main = self._flatten_activities(main_wf.get("activities", []))
@@ -464,6 +641,33 @@ class StandardsChecker:
                 recommendation="Give all stages meaningful names for readability.",
                 platform="blue_prism",
             ))
+
+        # BP005 — parallel threads without synchronise stage
+        # Proxy: detect multiple Action stages alongside absence of a Synchronise/Wait stage
+        action_stage_count = sum(1 for t in stage_types if t == "action")
+        has_synchronise = any(
+            t in ("synchronise", "sync", "wait", "anchor") for t in stage_types
+        ) or any(
+            n in ("synchronise", "sync", "wait", "synchronize") for n in stage_names
+        )
+        if action_stage_count >= 4 and not has_synchronise:
+            result.violations.append(StandardsViolation(
+                rule_id="BP005", rule_name="Parallel Threads Without Synchronise Stage",
+                severity="high",
+                description=(
+                    f"Process has {action_stage_count} Action stages but no Synchronise or Wait stage detected. "
+                    "If these stages run in parallel threads, shared data items may be accessed concurrently, "
+                    "causing race conditions or data corruption."
+                ),
+                location="process", location_type="workflow",
+                recommendation=(
+                    "Add a Synchronise (Anchor) stage after all parallel branches complete. "
+                    "Ensure shared Data Items are only written by one thread at a time."
+                ),
+                platform="blue_prism",
+            ))
+        else:
+            result.passed_rules.append("BP005")
 
     # ───────────────────────── Automation Anywhere ────────────────────────────
 
